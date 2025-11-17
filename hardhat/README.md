@@ -21,7 +21,7 @@ npm run test
 
 4. Deploy contracts:
 ```bash
-npm run deploy
+npm run deploy:local
 ```
 
 5. Start local Hardhat node:
@@ -57,7 +57,7 @@ hardhat ignition verify --network <network-name>
 
 ## Configuration
 
-The project is configured to use Solidity 0.8.20 with optimizer enabled. Network configurations can be added in `hardhat.config.js`. Ignition-specific settings are also configured in the config file.
+The project is configured to use Solidity 0.8.24 with optimizer enabled. Network configurations can be added in `hardhat.config.js`. Ignition-specific settings are also configured in the config file.
 
 ## TODOs
 

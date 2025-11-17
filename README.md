@@ -135,7 +135,7 @@ Rather Cake Pay follows a decentralized architecture with three main layers:
 
 ### Technology Stack
 
-- **Blockchain**: Solidity 0.8.20, Hardhat, Hardhat Ignition
+- **Blockchain**: Solidity 0.8.24, Hardhat, Hardhat Ignition
 - **Frontend**: Next.js 14, React 18, TypeScript, Ethers.js 6
 - **Development**: Hardhat for contract development and testing
 
@@ -346,9 +346,13 @@ function claimCakeSlice(uint128 _cakeId) public payable
 
 **isMember**
 ```solidity
-function isMember(uint128 _cakeId, address _member) public view returns (bool)
+function isMember(uint128 _cakeId, uint64 _memberId) public view returns (bool)
 ```
-- Checks if an address is a member of a cake
+- Checks if a member ID is a member of a cake
+- Parameters:
+  - `_cakeId`: The ID of the cake
+  - `_memberId`: The ID of the member to check
+- Returns true if the member is a member of the cake
 - Note: Currently marked as TODO in implementation
 
 **getCakeDetails**
@@ -368,9 +372,11 @@ function getCakeDetails(uint128 _cakeId) public view returns (
 
 **getCakeMembers**
 ```solidity
-function getCakeMembers(uint256 _cakeId) public view returns (uint64[] memory)
+function getCakeMembers(uint128 _cakeId) public view returns (uint64[] memory)
 ```
 - Gets all member IDs of a cake
+- Parameters:
+  - `_cakeId`: The ID of the cake
 - Returns array of user IDs (uint64), not addresses
 
 **getCakeIngredientDetails**
