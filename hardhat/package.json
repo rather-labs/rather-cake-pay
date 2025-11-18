@@ -9,7 +9,7 @@
     "lint": "solhint 'contracts/**/*.sol'",
     "format": "prettier --write 'contracts/**/*.sol'",
     "format:check": "prettier --check 'contracts/**/*.sol'",
-    "deploy:local": "hardhat ignition deploy ignition/modules/CakeFactory.js --network hardhat",
+    "deploy:local": "hardhat ignition deploy ignition/modules/CakeFactory.js --network localhost",
     "node": "hardhat node"
   },
   "keywords": [],

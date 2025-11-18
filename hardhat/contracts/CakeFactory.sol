@@ -102,170 +102,170 @@ contract CakeFactory {
         return 0;
     }
 
-    /**
-     * @notice Adds a new cake ingredient to a cake
-     * @param cakeId The ID of the cake
-     * @param weights array of weights for the batched cake ingredients
-     * @param payerIds array of user ids that will be payers of the batched cake ingredients
-     * @param payedAmounts array of amounts that each payer will pay for the batched cake ingredients
-     * @return The ID of the newly created batched cake ingredients
-     */
-    function addBatchedCakeIngredients(
-        uint128 cakeId,
-        uint8[] memory weights,
-        uint64[] memory payerIds,
-        uint256[] memory payedAmounts
-    ) public returns (uint128) {
-        // TODO: Implement
-        return 0;
-    }
+    // /**
+    //  * @notice Adds a new cake ingredient to a cake
+    //  * @param cakeId The ID of the cake
+    //  * @param weights array of weights for the batched cake ingredients
+    //  * @param payerIds array of user ids that will be payers of the batched cake ingredients
+    //  * @param payedAmounts array of amounts that each payer will pay for the batched cake ingredients
+    //  * @return The ID of the newly created batched cake ingredients
+    //  */
+    // function addBatchedCakeIngredients(
+    //     uint128 cakeId,
+    //     uint8[] memory weights,
+    //     uint64[] memory payerIds,
+    //     uint256[] memory payedAmounts
+    // ) public returns (uint128) {
+    //     // TODO: Implement
+    //     return 0;
+    // }
 
-    /**
-     * @notice Cuts a cake and updates the balances of the members
-     * @param _cakeId The ID of the cake
-     */
-    function cutCake(uint128 _cakeId) public payable {
-        // TODO: Implement
-    }
+    // /**
+    //  * @notice Cuts a cake and updates the balances of the members
+    //  * @param _cakeId The ID of the cake
+    //  */
+    // function cutCake(uint128 _cakeId) public payable {
+    //     // TODO: Implement
+    // }
 
-    /**
-     * @notice Votes to disable a cake
-     * @param _cakeId The ID of the cake
-     * @param _vote True to vote to disable the cake, false to vote to keep the cake active
-     */
-    function voteToDisableCake(uint128 _cakeId, bool _vote) public {
-        // If half or more of the members have voted to disable the cake, the cake is disabled
-        // TODO: Implement
-    }
+    // /**
+    //  * @notice Votes to disable a cake
+    //  * @param _cakeId The ID of the cake
+    //  * @param _vote True to vote to disable the cake, false to vote to keep the cake active
+    //  */
+    // function voteToDisableCake(uint128 _cakeId, bool _vote) public {
+    //     // If half or more of the members have voted to disable the cake, the cake is disabled
+    //     // TODO: Implement
+    // }
 
-    /**
-     * @notice Checks if an address is a member of a cake
-     * @param cakeId The ID of the cake
-     * @param memberId The ID of the member
-     * @return True if the member is a member of the cake
-     */
-    function isMember(uint128 cakeId, uint64 memberId) public view returns (bool) {
-        // TODO Implement
-    }
+    // /**
+    //  * @notice Checks if an address is a member of a cake
+    //  * @param cakeId The ID of the cake
+    //  * @param memberId The ID of the member
+    //  * @return True if the member is a member of the cake
+    //  */
+    // function isMember(uint128 cakeId, uint64 memberId) public view returns (bool) {
+    //     // TODO Implement
+    // }
 
-    /**
-     * @notice Pays the ammount owed by the caller to the cake
-     * @param cakeId The ID of the cake
-     */
-    function payCakeSlice(uint128 cakeId) public payable {
-        // TODO: Implement
-    }
+    // /**
+    //  * @notice Pays the ammount owed by the caller to the cake
+    //  * @param cakeId The ID of the cake
+    //  */
+    // function payCakeSlice(uint128 cakeId) public payable {
+    //     // TODO: Implement
+    // }
 
-    /**
-     * @notice Claims the slice of the cake that the caller is owed
-     * @param cakeId The ID of the cake
-     */
-    function claimCakeSlice(uint128 cakeId) public payable {
-        // TODO: Implement
-    }
+    // /**
+    //  * @notice Claims the slice of the cake that the caller is owed
+    //  * @param cakeId The ID of the cake
+    //  */
+    // function claimCakeSlice(uint128 cakeId) public payable {
+    //     // TODO: Implement
+    // }
 
-    /**
-     * @notice Gets the details of a cake
-     * @param cakeId The ID of the cake
-     * @return memberIds Array of member IDs in the cake
-     * @return currentBalances Current balances for each member
-     * @return interestRate Interest rate for unpaid amounts
-     * @return active Whether the cake is active
-     * @return token Token contract address
-     * @return lastCutAt Timestamp of last cake cut
-     * @return lastCutBatchedIngredientsId ID of last batched ingredients included in a cut
-     */
-    function getCakeDetails(
-        uint128 cakeId
-    )
-        public
-        view
-        returns (
-            uint64[] memory memberIds,
-            uint256[] memory currentBalances,
-            uint16 interestRate,
-            bool active,
-            address token,
-            uint64 lastCutAt,
-            uint64 lastCutBatchedIngredientsId
-        )
-    {
-        // Check if cake exists (createdAt will be non-zero if cake was created)
-        require(cakes[cakeId].createdAt != 0, "Cake does not exist");
+    // /**
+    //  * @notice Gets the details of a cake
+    //  * @param cakeId The ID of the cake
+    //  * @return memberIds Array of member IDs in the cake
+    //  * @return currentBalances Current balances for each member
+    //  * @return interestRate Interest rate for unpaid amounts
+    //  * @return active Whether the cake is active
+    //  * @return token Token contract address
+    //  * @return lastCutAt Timestamp of last cake cut
+    //  * @return lastCutBatchedIngredientsId ID of last batched ingredients included in a cut
+    //  */
+    // function getCakeDetails(
+    //     uint128 cakeId
+    // )
+    //     public
+    //     view
+    //     returns (
+    //         uint64[] memory memberIds,
+    //         uint256[] memory currentBalances,
+    //         uint16 interestRate,
+    //         bool active,
+    //         address token,
+    //         uint64 lastCutAt,
+    //         uint64 lastCutBatchedIngredientsId
+    //     )
+    // {
+    //     // Check if cake exists (createdAt will be non-zero if cake was created)
+    //     require(cakes[cakeId].createdAt != 0, "Cake does not exist");
 
-        return (
-            cakes[cakeId].memberIds,
-            cakes[cakeId].currentBalances,
-            cakes[cakeId].interestRate,
-            cakes[cakeId].active,
-            cakes[cakeId].token,
-            cakes[cakeId].lastCutAt,
-            cakes[cakeId].lastCutBatchedIngredientsId
-        );
-    }
+    //     return (
+    //         cakes[cakeId].memberIds,
+    //         cakes[cakeId].currentBalances,
+    //         cakes[cakeId].interestRate,
+    //         cakes[cakeId].active,
+    //         cakes[cakeId].token,
+    //         cakes[cakeId].lastCutAt,
+    //         cakes[cakeId].lastCutBatchedIngredientsId
+    //     );
+    // }
 
-    /**
-     * @notice Gets all members of a cake
-     * @param cakeId The ID of the cake
-     * @return Array of member ids
-     */
-    function getCakeMembers(uint128 cakeId) public view returns (uint64[] memory) {
-        // Check if cake exists (createdAt will be non-zero if cake was created)
-        require(cakes[cakeId].createdAt != 0, "Cake does not exist");
-        return cakes[cakeId].memberIds;
-    }
+    // /**
+    //  * @notice Gets all members of a cake
+    //  * @param cakeId The ID of the cake
+    //  * @return Array of member ids
+    //  */
+    // function getCakeMembers(uint128 cakeId) public view returns (uint64[] memory) {
+    //     // Check if cake exists (createdAt will be non-zero if cake was created)
+    //     require(cakes[cakeId].createdAt != 0, "Cake does not exist");
+    //     return cakes[cakeId].memberIds;
+    // }
 
-    /**
-     * @notice Gets cake ingredient details
-     * @param cakeId ID of the cake
-     * @param cakeIngredientId The ID of the cake ingredient
-     * @return weights Weights for the batched cake ingredients
-     * @return payerIds IDs of the payers
-     * @return payedAmounts Amounts paid by each payer
-     */
-    function getCakeIngredientDetails(
-        uint128 cakeId,
-        uint64 cakeIngredientId
-    ) public view returns (uint8[] memory weights, uint64[] memory payerIds, uint256[] memory payedAmounts) {
-        // Check if cake exists
-        require(cakes[cakeId].createdAt != 0, "Cake does not exist");
-        // Check if ingredient exists (createdAt will be non-zero if ingredient was created)
-        require(batchedIngredientsPerCake[cakeId][cakeIngredientId].createdAt != 0, "Cake ingredient does not exist");
+    // /**
+    //  * @notice Gets cake ingredient details
+    //  * @param cakeId ID of the cake
+    //  * @param cakeIngredientId The ID of the cake ingredient
+    //  * @return weights Weights for the batched cake ingredients
+    //  * @return payerIds IDs of the payers
+    //  * @return payedAmounts Amounts paid by each payer
+    //  */
+    // function getCakeIngredientDetails(
+    //     uint128 cakeId,
+    //     uint64 cakeIngredientId
+    // ) public view returns (uint8[] memory weights, uint64[] memory payerIds, uint256[] memory payedAmounts) {
+    //     // Check if cake exists
+    //     require(cakes[cakeId].createdAt != 0, "Cake does not exist");
+    //     // Check if ingredient exists (createdAt will be non-zero if ingredient was created)
+    //     require(batchedIngredientsPerCake[cakeId][cakeIngredientId].createdAt != 0, "Cake ingredient does not exist");
 
-        return (
-            batchedIngredientsPerCake[cakeId][cakeIngredientId].weights,
-            batchedIngredientsPerCake[cakeId][cakeIngredientId].payerIds,
-            batchedIngredientsPerCake[cakeId][cakeIngredientId].payedAmounts
-        );
-    }
+    //     return (
+    //         batchedIngredientsPerCake[cakeId][cakeIngredientId].weights,
+    //         batchedIngredientsPerCake[cakeId][cakeIngredientId].payerIds,
+    //         batchedIngredientsPerCake[cakeId][cakeIngredientId].payedAmounts
+    //     );
+    // }
 
-    /**
-     * @notice Gets the current balance of a member in a cake
-     * @param cakeId ID of the cake
-     * @param memberId ID of the member
-     * @return Current balance of the member
-     */
-    function getCakeMemberBalance(uint128 cakeId, uint64 memberId) public view returns (uint256) {
-        // Check if cake exists (createdAt will be non-zero if cake was created)
-        require(cakes[cakeId].createdAt != 0, "Cake does not exist");
-        return cakes[cakeId].currentBalances[memberId];
-    }
+    // /**
+    //  * @notice Gets the current balance of a member in a cake
+    //  * @param cakeId ID of the cake
+    //  * @param memberId ID of the member
+    //  * @return Current balance of the member
+    //  */
+    // function getCakeMemberBalance(uint128 cakeId, uint64 memberId) public view returns (uint256) {
+    //     // Check if cake exists (createdAt will be non-zero if cake was created)
+    //     require(cakes[cakeId].createdAt != 0, "Cake does not exist");
+    //     return cakes[cakeId].currentBalances[memberId];
+    // }
 
-    /**
-     * @notice Gets the user ID for a given address
-     * @param userAddress The address to look up
-     * @return The user ID (0 if not registered)
-     */
-    function getUserId(address userAddress) public view returns (uint64) {
-        return userIds[userAddress];
-    }
+    // /**
+    //  * @notice Gets the user ID for a given address
+    //  * @param userAddress The address to look up
+    //  * @return The user ID (0 if not registered)
+    //  */
+    // function getUserId(address userAddress) public view returns (uint64) {
+    //     return userIds[userAddress];
+    // }
 
-    /**
-     * @notice Gets the address for a given user ID
-     * @param userId The user ID to look up
-     * @return The user address (address(0) if not found)
-     */
-    function getUserAddress(uint64 userId) public view returns (address) {
-        return userAddresses[userId];
-    }
+    // /**
+    //  * @notice Gets the address for a given user ID
+    //  * @param userId The user ID to look up
+    //  * @return The user address (address(0) if not found)
+    //  */
+    // function getUserAddress(uint64 userId) public view returns (address) {
+    //     return userAddresses[userId];
+    // }
 }
