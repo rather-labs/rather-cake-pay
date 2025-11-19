@@ -260,13 +260,136 @@ contract CakeFactory {
         return ingredientId;
     }
 
-    // /**
-    //  * @notice Cuts a cake and updates the balances of the members
-    //  * @param _cakeId The ID of the cake
-    //  */
-    // function cutCake(uint128 _cakeId) public payable {
-    //     // TODO: Implement
-    // }
+    /**
+     * @notice Cuts a cake and updates the balances of the members
+     * @param _cakeId The ID of the cake
+     */
+    function cutCake(uint128 _cakeId) public payable {
+        //Check if cake exists    
+        Cake storage cake = cakes[_cakeId];
+        if (cake.createdAt == 0) {
+            revert CakeDoesNotExist(_cakeId);
+        }
+        if (!cake.active) {
+            revert CakeInactive(_cakeId);
+        }
+        // Obtain caller's user ID: this function is called every billing period.
+        uint64 callerId = userIds[msg.sender];
+        if (callerId == 0 || cakeMemberIndex[_cakeId][callerId] == 0) {
+            revert NotMember(callerId);
+        }
+        // Determine the range of ingredients to process
+        uint64 lastProcessedIngredientId = cake.lastCutBatchedIngredientsId;
+        uint128 latestIngredientId128 = cake.latestIngredientId;
+        if (latestIngredientId128 == 0 || latestIngredientId128 <= lastProcessedIngredientId) {
+            revert NothingToCut(_cakeId);
+        }
+        //Check for overflow
+        if (latestIngredientId128 > type(uint64).max) {
+            revert AmountTooLarge();
+        }
+        uint64 latestIngredientId = uint64(latestIngredientId128);
+
+        _accrueInterest(cake);
+
+        for (
+            uint64 ingredientId = lastProcessedIngredientId + 1;
+            ingredientId <= latestIngredientId;
+            ingredientId++
+        ) {
+            BatchedCakeIngredients storage ingredient = batchedIngredientsPerCake[_cakeId][ingredientId];
+            if (ingredient.createdAt == 0) {
+                revert IngredientDoesNotExist(_cakeId, ingredientId);
+            }
+            //Update balances with the ingredient
+            _applyIngredient(_cakeId, cake, ingredient);
+        }
+
+        cake.lastCutAt = uint64(block.timestamp);
+        cake.lastCutBatchedIngredientsId = latestIngredientId;
+        cake.nextDueAt = uint64(block.timestamp + cake.billingPeriod);
+
+        emit CakeCutted(_cakeId);
+    }
+
+    function _applyIngredient(
+        uint128 cakeId,
+        Cake storage cake,
+        BatchedCakeIngredients storage ingredient
+    ) internal {
+        //Validate ingredient
+        uint256 memberCount = cake.memberIds.length;
+        if (ingredient.weights.length != memberCount) {
+            revert InvalidWeights();
+        }
+        //Check payers
+        uint256 payerCount = ingredient.payerIds.length;
+        if (payerCount == 0 || payerCount != ingredient.payedAmounts.length) {
+            revert InvalidMembers();
+        }
+        //Sum total amount paid
+        uint256 totalAmount;
+        for (uint256 i = 0; i < payerCount; i++) {
+            totalAmount += ingredient.payedAmounts[i];
+        }
+        //Update balances
+        for (uint256 i = 0; i < memberCount; i++) {
+            uint256 memberShare = (totalAmount * ingredient.weights[i]) / BPS_DENOMINATOR;
+            cake.currentBalances[i] += _toInt256(memberShare);
+        }
+        //Subtract payed amounts from payers
+        for (uint256 i = 0; i < payerCount; i++) {
+            uint64 payerId = ingredient.payerIds[i];
+            // Find member index in the cake
+            uint64 indexPlusOne = cakeMemberIndex[cakeId][payerId];
+            if (indexPlusOne == 0) {
+                revert NotMember(payerId);
+            }
+            uint256 memberIdx = uint256(indexPlusOne - 1);
+            cake.currentBalances[memberIdx] -= _toInt256(ingredient.payedAmounts[i]);
+        }
+    }
+
+    function _accrueInterest(Cake storage cake) internal {
+        //Check if interest applies
+        if (cake.interestRate == 0 || cake.billingPeriod == 0) {
+            return;
+        }
+        //Check for overdue
+        if (block.timestamp <= cake.nextDueAt) {
+            return;
+        }
+
+        uint256 overdueTime = block.timestamp - cake.nextDueAt;
+        uint256 periodsLate = overdueTime / cake.billingPeriod;
+        // Add an extra period if there is a remainder
+        if (overdueTime % cake.billingPeriod != 0) {
+            periodsLate += 1;
+        }
+        // Add at least one period
+        if (periodsLate == 0) {
+            periodsLate = 1;
+        }
+
+        for (uint256 i = 0; i < cake.currentBalances.length; i++) {
+            int256 balance = cake.currentBalances[i];
+            // Check if balance is positive, if it is negative or zero, skip interest accrual
+            // Positive balance means the member owes money to the cake
+            if (balance <= 0) {
+                continue;
+            }
+            uint256 principal = uint256(balance);
+            uint256 interest = (principal * cake.interestRate * periodsLate) / BPS_DENOMINATOR;
+            cake.currentBalances[i] = balance + _toInt256(interest);
+        }
+    }
+
+    function _toInt256(uint256 value) internal pure returns (int256) {
+        if (value > uint256(type(int256).max)) {
+            revert AmountTooLarge();
+        }
+        return int256(value);
+    }
 
     // /**
     //  * @notice Votes to disable a cake
