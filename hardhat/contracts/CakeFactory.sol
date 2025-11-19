@@ -12,6 +12,11 @@ import { IPermit2 } from "@uniswap/permit2/src/interfaces/IPermit2.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
 
 /**
  * @title CakeFactory
@@ -19,13 +24,18 @@ import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
  * @author @jbeliera-rather
  * @dev Each cake represents a group that can split bills and manage cake ingredients
  */
-contract CakeFactory {
+contract CakeFactory is Ownable {
+
+    using SafeERC20 for IERC20;
 
     // Assets for using Uniswap v4
     using StateLibrary for IPoolManager;
+    using PoolIdLibrary for PoolKey;
     UniversalRouter public immutable router;
     IPoolManager public immutable poolManager;
     IPermit2 public immutable permit2;
+
+    mapping(address => mapping(address => PoolKey)) public tokenPairPoolKeys;
 
     // Struct to represent a group (cake)
     struct Cake {
@@ -37,7 +47,7 @@ contract CakeFactory {
         uint64 nextDueAt; // Timestamp for the next expected settlement
         uint16 interestRate; // Interest rate for unpaid amounts in this cake
         bool active; // Whether the cake is active, half or more of members can disable the cake
-        address token; // Token contract address (0x0 for native ETH)
+        address token; // Token address
         bool[] votesToDisable; // Current Votes to disable the cake
         uint64[] memberIds; // Array of user IDs in the cake
         uint16[] memberWeights; // Payment weights per member (same order as memberIds)
@@ -102,6 +112,10 @@ contract CakeFactory {
     error IngredientDoesNotExist(uint128 cakeId, uint64 ingredientId);
 
     uint16 private constant BPS_DENOMINATOR = 10_000;
+    event CakeSlicePaid(uint128 indexed cakeId, uint64 indexed userId, uint256 amount);
+    event CakeSliceClaimed(uint128 indexed cakeId, uint64 indexed userId, uint256 amount);
+    event CakeDisabled(uint128 indexed cakeId);
+    event CakeEnabled(uint128 indexed cakeId);
 
     /**
      * @notice Initializes the contract
@@ -424,21 +438,65 @@ contract CakeFactory {
         return cakeMemberIndex[cakeId][memberId] != 0;
     }
 
-    // /**
-    //  * @notice Pays the ammount owed by the caller to the cake
-    //  * @param cakeId The ID of the cake
-    //  */
-    // function payCakeSlice(uint128 cakeId) public payable {
-    //     // TODO: Implement
-    // }
+    /**
+     * @notice Pays the ammount owed by the caller to the cake
+     * @param cakeId The ID of the cake
+     * @param token The token to pay with
+     * @dev TODO: currently not limiting maximum amount to swap in
+     * @dev TODO: separate the logic of paying with ETH and ERC20
+     */
+    function payCakeSlice(uint128 cakeId, IERC20 token) public nonReentrant payable {
+        require(userIds[msg.sender] != 0, "User not registered");
+        
+        uint256 userBalance = cakes[cakeId].currentBalances[userIds[msg.sender]];
+        require(userBalance < 0, "User has no debt in the cake to pay");
 
-    // /**
-    //  * @notice Claims the slice of the cake that the caller is owed
-    //  * @param cakeId The ID of the cake
-    //  */
-    // function claimCakeSlice(uint128 cakeId) public payable {
-    //     // TODO: Implement
-    // }
+        cakes[cakeId].currentBalances[userIds[msg.sender]] = 0;  
+
+        if (token != cakes[cakeId].token) {
+            PoolKey memory key = getPoolKey(token, cakes[cakeId].token);
+            require(key.currency0 != address(0) && key.currency1 != address(0), "Pool not configured");
+            bool zeroForOne = token < cakes[cakeId].token;
+            _swapExactOutputSingle(key, zeroForOne, -userBalance, type(uint256).max);
+        } 
+
+        if (token == address(0)) {
+            require(msg.value >= -userBalance, "Insufficient ETH sent");
+        } else {
+            IERC20(token).safeTransferFrom(msg.sender, address(this), -userBalance);
+        }
+
+        emit CakeSlicePaid(cakeId, userIds[msg.sender], -userBalance);
+
+    }
+
+    /**
+     * @notice Claims the slice of the cake that the caller is owed
+     * @param cakeId The ID of the cake
+     */
+    function claimCakeSlice(uint128 cakeId) public nonReentrant {
+        require(userIds[msg.sender] != 0, "User not registered");
+        
+        uint256 userBalance = cakes[cakeId].currentBalances[userIds[msg.sender]];
+        require(userBalance > 0, "User has no credit in the cake to claim");
+
+        cakes[cakeId].currentBalances[userIds[msg.sender]] = 0;  
+
+        if (token != cakes[cakeId].token) {
+            require(key.currency0 != address(0) && key.currency1 != address(0), "Pool not configured");
+            PoolKey memory key = getPoolKey(token, cakes[cakeId].token);
+            bool zeroForOne = token < cakes[cakeId].token;
+            _swapExactInputSingle(key, zeroForOne, userBalance, type(uint256).max);
+        } 
+
+        if (token == address(0)) {
+            require(msg.value >= userBalance, "Insufficient ETH sent");
+        } else {
+            IERC20(token).safeTransferFrom(address(this), msg.sender, userBalance);
+        }
+    
+        emit CakeSliceClaimed(cakeId, userIds[msg.sender], userBalance);
+    }
 
     /**
      * @notice Gets the high-level details of a cake
@@ -587,6 +645,32 @@ contract CakeFactory {
      * UNISWAP V4 LOGIC
      */
 
+     /**
+     * @notice Get pool key for a given pair
+     * @param token0 The first token
+     * @param token1 The second token
+     * @return The pool key
+     */
+    function getPoolKey(address token0, address token1) public view returns (PoolKey memory) {
+        if token0 > token1 {
+            (token0, token1) = (token1, token0);
+        }
+        return tokenPairPoolKeys[token0][token1];
+    }
+
+     /**
+     * @notice Store pool key for a given pair
+     * @param token0 The first token
+     * @param token1 The second token
+     */
+    function storePoolKey(address token0, address token, PoolKey memory poolKey) public OnlyOwner {
+        if token0 > token1 {
+            (token0, token1) = (token1, token0);
+        }
+        tokenPairPoolKeys[token0][token1] = poolKey;
+    }
+    
+
     /**
      * @notice Approves the router to spend the token with Permit2
      * @param token The token to approve
@@ -598,7 +682,7 @@ contract CakeFactory {
 	    uint160 amount,
 	    uint48 expiration
     ) internal {
-        IERC20(token).approve(address(permit2), type(uint256).max);
+        IERC20(token).approve(address(permit2), amount);
         permit2.approve(token, address(router), amount, expiration);
     }
 
@@ -606,8 +690,9 @@ contract CakeFactory {
      * @notice Executes a swap that returns exact output amount
      * @param key The pool key
      * @param zeroForOne The direction of the swap
-     * @param amountIn The amount to swap
+     * @param amountOut The desired amount to swap
      * @param maxAmountIn The maximum amount to swap
+     * @return amountIn The amount of input currency spent
      * @dev Using single-hop. TODO: Implement multi-hop swaps.
      */
     function _swapExactOutputSingle(
@@ -615,7 +700,7 @@ contract CakeFactory {
         bool zeroForOne,
         uint128 amountOut,
         uint128 maxAmountIn
-    ) internal {
+    ) internal returns (uint256 amountIn) {
         // Encode the Universal Router command
         bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
         bytes[] memory inputs = new bytes[](1);
@@ -627,6 +712,14 @@ contract CakeFactory {
             uint8(Actions.TAKE_ALL)
         );
     
+        if (ZeroForOne) { 
+            inputCurrency = key.currency0;
+            outputCurrency = key.currency1;
+        } else {
+            inputCurrency = key.currency1;
+            outputCurrency = key.currency0;
+        }
+
         // Prepare parameters for each action
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
@@ -638,19 +731,90 @@ contract CakeFactory {
                 hookData: bytes("")
             })
         );
-        if (zeroForOne) {
-            params[1] = abi.encode(key.currency0, maxAmountIn);
-            params[2] = abi.encode(key.currency1, amountOut);
-        } else {
-            params[1] = abi.encode(key.currency1, maxAmountIn);
-            params[2] = abi.encode(key.currency0, amountOut);
-        }
+
+        // Deadline for the swap
+        uint256 deadline = block.timestamp + 300; // 5 minutes
+
+        params[1] = abi.encode(inputCurrency, maxAmountIn);
+        params[2] = abi.encode(outputCurrency, amountOut);
+        _approveTokenWithPermit2(inputCurrency, maxAmountIn, deadline);
     
         // Combine actions and params into inputs
         inputs[0] = abi.encode(actions, params);
+
+        balancePreSwap = inputCurrency.balanceOf(address(this));
     
         // Execute the swap
-        uint256 deadline = block.timestamp + 60;
         router.execute(commands, inputs, deadline);
+
+        return inputCurrency.balanceOf(address(this)) - balancePreSwap;
     }
+
+    /**
+     * @notice Executes a swap with exact input amount 
+     * @param key The pool key
+     * @param zeroForOne The direction of the swap
+     * @param amountIn The amount to swap
+     * @param minAmountOut The minimum amount to swap
+     * @return amountOut The amount of output currency received
+     * @dev Using single-hop. TODO: Implement multi-hop swaps.
+     */
+    function _swapExactInputSingle(
+        PoolKey calldata key,
+        bool zeroForOne,
+        uint128 amountIn,
+        uint128 minAmountOut
+    ) internal returns (uint256 amountOut) {
+        // Encode the Universal Router command
+        bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
+        bytes[] memory inputs = new bytes[](1);
+    
+        // Encode V4Router actions
+        bytes memory actions = abi.encodePacked(
+            uint8(Actions.SWAP_EXACT_IN_SINGLE),
+            uint8(Actions.SETTLE_ALL),
+            uint8(Actions.TAKE_ALL)
+        );
+
+
+        if (ZeroForOne) { 
+            inputCurrency = key.currency0;
+            outputCurrency = key.currency1;
+        } else {
+            inputCurrency = key.currency1;
+            outputCurrency = key.currency0;
+        }
+    
+        // Prepare parameters for each action
+        bytes[] memory params = new bytes[](3);
+        params[0] = abi.encode(
+            IV4Router.ExactInputSingleParams({
+                poolKey: key,
+                zeroForOne: zeroForOne,
+                amountIn: amountIn,
+                amountOutMinimum: minAmountOut,
+                hookData: bytes("")
+            })
+        );
+
+        // Deadline for the swap
+        uint256 deadline = block.timestamp + 300; // 5 minutes
+
+        params[1] = abi.encode(inputCurrency, amountIn);
+        params[2] = abi.encode(outputCurrency, minAmountOut);
+        _approveTokenWithPermit2(inputCurrency, amountIn, deadline);
+    
+        // Combine actions and params into inputs
+        inputs[0] = abi.encode(actions, params);
+        
+        balancePreSwap = outputCurrency.balanceOf(address(this));
+    
+        // Execute the swap
+        router.execute(commands, inputs, deadline);
+
+
+        return outputCurrency.balanceOf(address(this)) - balancePreSwap;
+    }
+
+
 }
