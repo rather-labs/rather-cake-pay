@@ -25,7 +25,6 @@ contract CakeFactory {
         int256[] currentBalances; // Current ammounts to be paid by each member
     }
 
-
     // Struct to represent off-chain batched cake ingredients (expense) within a cake
     struct BatchedCakeIngredients {
         uint64 createdAt; // Timestamp of batched ingredients creation (64-bit, valid until 2106)
@@ -51,7 +50,7 @@ contract CakeFactory {
 
     // Mapping from user Ids to mapping of cakes its participating in and whete it has debts to the cake
     mapping(uint64 => mapping(uint128 => bool)) public userCakes;
-    mapping(uint128 => mapping(uint64 => uint64)) public cakeMemberIndex;   // quick lookup for member index in cake arrays 
+    mapping(uint128 => mapping(uint64 => uint64)) public cakeMemberIndex; // quick lookup for member index in cake arrays
 
     // Total number of users registered
     uint64 public totalUsers;
@@ -78,7 +77,6 @@ contract CakeFactory {
     error NothingToCut(uint128 cakeId);
     error AmountTooLarge();
     error IngredientDoesNotExist(uint128 cakeId, uint64 ingredientId);
-
 
     uint16 private constant BPS_DENOMINATOR = 10_000;
 
@@ -141,11 +139,9 @@ contract CakeFactory {
             revert InvalidWeights();
         }
 
-
         totalCakes++;
         uint128 cakeId = totalCakes;
         Cake storage cake = cakes[cakeId];
-
 
         cake.createdAt = uint64(block.timestamp);
         cake.lastCutAt = uint64(block.timestamp);
@@ -157,12 +153,10 @@ contract CakeFactory {
         cake.active = true;
         cake.token = token;
 
-
         cake.memberIds = new uint64[](memberIds.length);
         cake.memberWeights = new uint16[](memberIds.length);
         cake.currentBalances = new int256[](memberIds.length);
         cake.votesToDisable = new bool[](memberIds.length);
-
 
         for (uint256 i = 0; i < memberIds.length; i++) {
             uint64 memberId = memberIds[i];
@@ -173,7 +167,6 @@ contract CakeFactory {
                 revert DuplicateMember(memberId);
             }
 
-
             cake.memberIds[i] = memberId;
             cake.memberWeights[i] = memberWeightsBps[i];
             cake.currentBalances[i] = 0;
@@ -181,11 +174,9 @@ contract CakeFactory {
             userCakes[memberId][cakeId] = true;
         }
 
-
         emit CakeCreated(cakeId);
         return cakeId;
     }
-
 
     /**
      * @notice Adds a new cake ingredient to a cake
@@ -265,7 +256,7 @@ contract CakeFactory {
      * @param _cakeId The ID of the cake
      */
     function cutCake(uint128 _cakeId) public payable {
-        //Check if cake exists    
+        //Check if cake exists
         Cake storage cake = cakes[_cakeId];
         if (cake.createdAt == 0) {
             revert CakeDoesNotExist(_cakeId);
@@ -292,11 +283,7 @@ contract CakeFactory {
 
         _accrueInterest(cake);
 
-        for (
-            uint64 ingredientId = lastProcessedIngredientId + 1;
-            ingredientId <= latestIngredientId;
-            ingredientId++
-        ) {
+        for (uint64 ingredientId = lastProcessedIngredientId + 1; ingredientId <= latestIngredientId; ingredientId++) {
             BatchedCakeIngredients storage ingredient = batchedIngredientsPerCake[_cakeId][ingredientId];
             if (ingredient.createdAt == 0) {
                 revert IngredientDoesNotExist(_cakeId, ingredientId);
@@ -312,11 +299,7 @@ contract CakeFactory {
         emit CakeCutted(_cakeId);
     }
 
-    function _applyIngredient(
-        uint128 cakeId,
-        Cake storage cake,
-        BatchedCakeIngredients storage ingredient
-    ) internal {
+    function _applyIngredient(uint128 cakeId, Cake storage cake, BatchedCakeIngredients storage ingredient) internal {
         //Validate ingredient
         uint256 memberCount = cake.memberIds.length;
         if (ingredient.weights.length != memberCount) {
