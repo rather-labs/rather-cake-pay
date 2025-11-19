@@ -29,7 +29,7 @@ DROP TABLE IF EXISTS balances CASCADE;
 CREATE TABLE users (
   id BIGSERIAL PRIMARY KEY,
   wallet_address TEXT NOT NULL UNIQUE,
-  username TEXT,
+  username TEXT NOT NULL UNIQUE,
   avatar_url TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -41,8 +41,7 @@ CREATE TABLE cakes (
   id BIGSERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
-  image_url TEXT,
-  category TEXT,
+  icon_index INTEGER, -- Index in the icon options array (0-based)
   token TEXT NOT NULL DEFAULT '0x0000000000000000000000000000000000000000', -- Token contract address (0x0 for native ETH)
   interest_rate NUMERIC(5, 2) NOT NULL DEFAULT 0, -- Interest rate to be added to unpaid amounts
   last_cut_at BIGINT, -- Timestamp of last cake cut (uint64)
@@ -77,16 +76,24 @@ CREATE TABLE cake_ingredients (
 -- =====================================================
 
 -- Users indexes
-CREATE INDEX idx_users_wallet_address ON users(wallet_address);
+-- Note: wallet_address already has UNIQUE constraint in table definition
+-- This index supports the unique constraint and improves query performance
+CREATE UNIQUE INDEX idx_users_wallet_address ON users(wallet_address);
+CREATE UNIQUE INDEX idx_users_username ON users(username);
 
 -- Cakes indexes
 CREATE INDEX idx_cakes_token ON cakes(token);
-CREATE INDEX idx_cakes_category ON cakes(category);
+CREATE INDEX idx_cakes_icon_index ON cakes(icon_index);
 CREATE INDEX idx_cakes_created_at ON cakes(created_at);
 CREATE INDEX idx_cakes_last_cut_at ON cakes(last_cut_at);
 
 -- Cake ingredients indexes
 CREATE INDEX idx_cake_ingredients_cake_id ON cake_ingredients(cake_id);
+-- Unique constraint on batched_ingredients_id (only for non-null values)
+-- This ensures each on-chain ingredient ID can only be used once
+CREATE UNIQUE INDEX idx_cake_ingredients_batched_ingredients_id_unique 
+  ON cake_ingredients(batched_ingredients_id) 
+  WHERE batched_ingredients_id IS NOT NULL;
 CREATE INDEX idx_cake_ingredients_batched_ingredients_id ON cake_ingredients(batched_ingredients_id);
 CREATE INDEX idx_cake_ingredients_status ON cake_ingredients(status);
 CREATE INDEX idx_cake_ingredients_created_at ON cake_ingredients(created_at);

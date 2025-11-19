@@ -13,7 +13,7 @@ export interface Database {
         Row: {
           id: number
           wallet_address: string
-          username: string | null
+          username: string
           avatar_url: string | null
           created_at: string
           updated_at: string
@@ -21,7 +21,7 @@ export interface Database {
         Insert: {
           id?: number
           wallet_address: string
-          username?: string | null
+          username: string
           avatar_url?: string | null
           created_at?: string
           updated_at?: string
@@ -29,7 +29,7 @@ export interface Database {
         Update: {
           id?: number
           wallet_address?: string
-          username?: string | null
+          username?: string
           avatar_url?: string | null
           created_at?: string
           updated_at?: string
@@ -40,8 +40,7 @@ export interface Database {
           id: number
           name: string
           description: string | null
-          image_url: string | null
-          category: string | null
+          icon_index: number | null
           token: string
           interest_rate: number
           last_cut_at: number | null
@@ -55,8 +54,7 @@ export interface Database {
           id?: number
           name: string
           description?: string | null
-          image_url?: string | null
-          category?: string | null
+          icon_index?: number | null
           token?: string
           interest_rate?: number
           last_cut_at?: number | null
@@ -70,8 +68,7 @@ export interface Database {
           id?: number
           name?: string
           description?: string | null
-          image_url?: string | null
-          category?: string | null
+          icon_index?: number | null
           token?: string
           interest_rate?: number
           last_cut_at?: number | null

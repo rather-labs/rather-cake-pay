@@ -140,5 +140,6 @@ export const MOCK_SETTLEMENT: MockSettlement = {
 // ============================================================================
 // Mock Icon Options
 // ============================================================================
-export const ICON_OPTIONS = ['🍰', '🏖️', '🏠', '🍕', '✈️', '🎉', '🎮', '🏃', '🎬', '☕', '🍔', '🎸']
+// Re-export from constants for backward compatibility
+export { ICON_OPTIONS } from './constants'
 
