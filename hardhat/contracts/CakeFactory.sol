@@ -51,6 +51,8 @@ contract CakeFactory {
 
     // Mapping from user Ids to mapping of cakes its participating in and where it has debts to the cake
     mapping(uint64 => mapping(uint128 => bool)) public userCakes;
+    // Mapping from user ID to the list of cake IDs they belong to
+    mapping(uint64 => uint128[]) private userCakeIds;    
     // Mapping from cake ID to mapping of member ID to member index in cake arrays
     mapping(uint128 => mapping(uint64 => uint64)) public cakeMemberIndex; // quick lookup for member index in cake arrays
 
@@ -173,7 +175,8 @@ contract CakeFactory {
             cake.memberWeights[i] = memberWeightsBps[i];
             cake.currentBalances[i] = 0;
             cakeMemberIndex[cakeId][memberId] = uint64(i + 1);
-            userCakes[memberId][cakeId] = true;
+            userCakes[memberId][cakeId] = true;// mark that the user is part of this cake
+            userCakeIds[memberId].push(cakeId);// how to track cakes per user
         }
 
         emit CakeCreated(cakeId);
@@ -508,21 +511,56 @@ contract CakeFactory {
         return cake.currentBalances[uint256(indexPlusOne - 1)];
     }
 
-    // /**
-    //  * @notice Gets the user ID for a given address
-    //  * @param userAddress The address to look up
-    //  * @return The user ID (0 if not registered)
-    //  */
-    // function getUserId(address userAddress) public view returns (uint64) {
-    //     return userIds[userAddress];
-    // }
+    /**
+     * @notice Gets the user ID for a given address
+     * @param userAddress The address to look up
+     * @return The user ID (0 if not registered)
+     */
+    function getUserId(address userAddress) public view returns (uint64) {
+        return userIds[userAddress];
+    }
 
-    // /**
-    //  * @notice Gets the address for a given user ID
-    //  * @param userId The user ID to look up
-    //  * @return The user address (address(0) if not found)
-    //  */
-    // function getUserAddress(uint64 userId) public view returns (address) {
-    //     return userAddresses[userId];
-    // }
+    /**
+     * @notice Gets the address for a given user ID
+     * @param userId The user ID to look up
+     * @return The user address (address(0) if not found)
+     */
+    function getUserAddress(uint64 userId) public view returns (address) {
+        return userAddresses[userId];
+    }
+
+    /**
+     * @notice Gets every cake where the user participates
+     * @param userId The ID of the user
+     * @return Array of cake IDs the user belongs to
+     */
+    function getUserCakes(uint64 userId) external view returns (uint128[] memory) {
+        if (userAddresses[userId] == address(0)) {
+            revert MemberNotRegistered(userId);
+        }
+        return userCakeIds[userId];
+    }    
+    /**
+     * @notice Returns the member roster plus their payment weights (same ordering).
+     * @dev Reverts if the cake doesn’t exist or its metadata arrays diverge.
+     * @param cakeId ID of the cake to inspect
+     * @return memberIds Array of member IDs in roster order
+     * @return memberWeights Array of weight BPS aligned with memberIds
+     */
+    function getCakeMemberConfig(
+        uint128 cakeId
+    )
+        external
+        view
+        returns (uint64[] memory memberIds, uint16[] memory memberWeights)
+    {
+        Cake storage cake = cakes[cakeId];
+        if (cake.createdAt == 0) {
+            revert CakeDoesNotExist(cakeId);
+        }
+        if (cake.memberIds.length != cake.memberWeights.length) {
+            revert InvalidMembers();
+        }        
+        return (cake.memberIds, cake.memberWeights);
+    }
 }
