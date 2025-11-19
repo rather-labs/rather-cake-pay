@@ -384,15 +384,16 @@ contract CakeFactory {
     //     // TODO: Implement
     // }
 
-    // /**
-    //  * @notice Checks if an address is a member of a cake
-    //  * @param cakeId The ID of the cake
-    //  * @param memberId The ID of the member
-    //  * @return True if the member is a member of the cake
-    //  */
-    // function isMember(uint128 cakeId, uint64 memberId) public view returns (bool) {
-    //     // TODO Implement
-    // }
+    /**
+     * @notice Checks if an address is a member of a cake
+     * @param cakeId The ID of the cake
+     * @param memberId The ID of the member
+     * @return True if the member is a member of the cake
+     */
+    function isMember(uint128 cakeId, uint64 memberId) public view returns (bool) {
+        // Check if the memberId exists in the cakeMemberIndex mapping for the given cakeId
+        return cakeMemberIndex[cakeId][memberId] != 0;
+    }
 
     // /**
     //  * @notice Pays the ammount owed by the caller to the cake
