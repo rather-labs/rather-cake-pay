@@ -29,7 +29,7 @@ contract CakeFactory {
     // Struct to represent off-chain batched cake ingredients (expense) within a cake
     struct BatchedCakeIngredients {
         uint64 createdAt; // Timestamp of batched ingredients creation (64-bit, valid until 2106)
-        uint8[] weights; // Payment weights per member (same order as Cake.memberIds), all the weights must coincide (this has to be done correctly off-chain)
+        uint16[] weights; // Payment weights per member (same order as Cake.memberIds), all the weights must coincide (this has to be done correctly off-chain)
         uint64[] payerIds; // User IDs of payers
         uint256[] payedAmounts; // Amounts paid by each payer
     }
@@ -77,6 +77,7 @@ contract CakeFactory {
     error NotMember(uint64 memberId);
     error NothingToCut(uint128 cakeId);
     error AmountTooLarge();
+    error IngredientDoesNotExist(uint128 cakeId, uint64 ingredientId);
 
 
     uint16 private constant BPS_DENOMINATOR = 10_000;
@@ -186,23 +187,78 @@ contract CakeFactory {
     }
 
 
-    // /**
-    //  * @notice Adds a new cake ingredient to a cake
-    //  * @param cakeId The ID of the cake
-    //  * @param weights array of weights for the batched cake ingredients
-    //  * @param payerIds array of user ids that will be payers of the batched cake ingredients
-    //  * @param payedAmounts array of amounts that each payer will pay for the batched cake ingredients
-    //  * @return The ID of the newly created batched cake ingredients
-    //  */
-    // function addBatchedCakeIngredients(
-    //     uint128 cakeId,
-    //     uint8[] memory weights,
-    //     uint64[] memory payerIds,
-    //     uint256[] memory payedAmounts
-    // ) public returns (uint128) {
-    //     // TODO: Implement
-    //     return 0;
-    // }
+    /**
+     * @notice Adds a new cake ingredient to a cake
+     * @param cakeId The ID of the cake
+     * @param weights array of weights for the batched cake ingredients
+     * @param payerIds array of user ids that will be payers of the batched cake ingredients
+     * @param payedAmounts array of amounts that each payer will pay for the batched cake ingredients
+     * @return The ID of the newly created batched cake ingredients
+     */
+    function addBatchedCakeIngredients(
+        uint128 cakeId,
+        uint16[] memory weights,
+        uint64[] memory payerIds,
+        uint256[] memory payedAmounts
+    ) public returns (uint128) {
+        Cake storage cake = cakes[cakeId];
+        //Check if cake exists
+        if (cake.createdAt == 0) {
+            revert CakeDoesNotExist(cakeId);
+        }
+        //Check if cake is active
+        if (!cake.active) {
+            revert CakeInactive(cakeId);
+        }
+        //Check if payerIds and payedAmounts are valid
+        if (payerIds.length == 0 || payerIds.length != payedAmounts.length) {
+            revert InvalidMembers();
+        }
+
+        // Determine effective weights
+        uint16[] memory effectiveWeights;
+        if (weights.length == 0) {
+            uint256 memberCount = cake.memberWeights.length;
+            effectiveWeights = new uint16[](memberCount);
+            for (uint256 i = 0; i < memberCount; i++) {
+                effectiveWeights[i] = cake.memberWeights[i];
+            }
+        } else {
+            if (weights.length != cake.memberIds.length) {
+                revert InvalidWeights();
+            }
+            uint256 weightSum;
+            for (uint256 i = 0; i < weights.length; i++) {
+                weightSum += weights[i];
+            }
+            if (weightSum != BPS_DENOMINATOR) {
+                revert InvalidWeights();
+            }
+            effectiveWeights = weights;
+        }
+
+        // Validate that all payerIds are members of the cake
+        for (uint256 i = 0; i < payerIds.length; i++) {
+            uint64 payerId = payerIds[i];
+            if (payerId == 0 || cakeMemberIndex[cakeId][payerId] == 0) {
+                revert NotMember(payerId);
+            }
+        }
+
+        cake.latestIngredientId += 1;
+        uint64 ingredientId = uint64(cake.latestIngredientId);
+        totalBatchedCakeIngredients++;
+
+        // populate the batched cake ingredients and save it in the mapping
+        BatchedCakeIngredients storage ingredient = batchedIngredientsPerCake[cakeId][ingredientId];
+        ingredient.createdAt = uint64(block.timestamp);
+        ingredient.weights = effectiveWeights;
+        ingredient.payerIds = payerIds;
+        ingredient.payedAmounts = payedAmounts;
+
+        emit BatchedCakeIngredientsAdded(ingredientId, cakeId);
+        return ingredientId;
+    }
 
     // /**
     //  * @notice Cuts a cake and updates the balances of the members
@@ -289,29 +345,37 @@ contract CakeFactory {
     //     return cakes[cakeId].memberIds;
     // }
 
-    // /**
-    //  * @notice Gets cake ingredient details
-    //  * @param cakeId ID of the cake
-    //  * @param cakeIngredientId The ID of the cake ingredient
-    //  * @return weights Weights for the batched cake ingredients
-    //  * @return payerIds IDs of the payers
-    //  * @return payedAmounts Amounts paid by each payer
-    //  */
-    // function getCakeIngredientDetails(
-    //     uint128 cakeId,
-    //     uint64 cakeIngredientId
-    // ) public view returns (uint8[] memory weights, uint64[] memory payerIds, uint256[] memory payedAmounts) {
-    //     // Check if cake exists
-    //     require(cakes[cakeId].createdAt != 0, "Cake does not exist");
-    //     // Check if ingredient exists (createdAt will be non-zero if ingredient was created)
-    //     require(batchedIngredientsPerCake[cakeId][cakeIngredientId].createdAt != 0, "Cake ingredient does not exist");
+    /**
+     * @notice Gets cake ingredient details
+     * @param cakeId ID of the cake
+     * @param ingredientId The ID of the cake ingredient
+     * @return weights Weights for the batched cake ingredients
+     * @return payerIds IDs of the payers
+     * @return payedAmounts Amounts paid by each payer
+     * @return createdAt Timestamp when the ingredient was registered
+     */
+    function getCakeIngredientDetails(
+        uint128 cakeId,
+        uint64 ingredientId
+    )
+        public
+        view
+        returns (uint16[] memory weights, uint64[] memory payerIds, uint256[] memory payedAmounts, uint64 createdAt)
+    {
+        Cake storage cake = cakes[cakeId];
+        //Check if cake exists
+        if (cake.createdAt == 0) {
+            revert CakeDoesNotExist(cakeId);
+        }
 
-    //     return (
-    //         batchedIngredientsPerCake[cakeId][cakeIngredientId].weights,
-    //         batchedIngredientsPerCake[cakeId][cakeIngredientId].payerIds,
-    //         batchedIngredientsPerCake[cakeId][cakeIngredientId].payedAmounts
-    //     );
-    // }
+        //Check if ingredient exists
+        BatchedCakeIngredients storage ingredient = batchedIngredientsPerCake[cakeId][ingredientId];
+        if (ingredient.createdAt == 0) {
+            revert IngredientDoesNotExist(cakeId, ingredientId);
+        }
+
+        return (ingredient.weights, ingredient.payerIds, ingredient.payedAmounts, ingredient.createdAt);
+    }
 
     // /**
     //  * @notice Gets the current balance of a member in a cake
