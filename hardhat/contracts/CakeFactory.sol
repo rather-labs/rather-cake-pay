@@ -90,17 +90,17 @@ contract CakeFactory {
         return totalUsers;
     }
 
-    /**
-     * @notice Creates a new cake (group)
-     * @param token address of the token that will be used to pay for the cake
-     * @param memberIds array of user ids that will be members of the cake
-     * @param interestRate interest rate for unpaid ammounts of the cake
-     * @return The ID of the newly created cake
-     */
-    function createCake(address token, uint64[] memory memberIds, uint16 interestRate) public returns (uint128) {
-        // TODO: Implement
-        return 0;
-    }
+    // /**
+    //  * @notice Creates a new cake (group)
+    //  * @param token address of the token that will be used to pay for the cake
+    //  * @param memberIds array of user ids that will be members of the cake
+    //  * @param interestRate interest rate for unpaid ammounts of the cake
+    //  * @return The ID of the newly created cake
+    //  */
+    // function createCake(address token, uint64[] memory memberIds, uint16 interestRate) public returns (uint128) {
+    //     // TODO: Implement
+    //     return 0;
+    // }
 
     // /**
     //  * @notice Adds a new cake ingredient to a cake
