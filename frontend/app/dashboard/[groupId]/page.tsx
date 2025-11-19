@@ -2,13 +2,39 @@
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { ArrowLeft, Plus, Users, Calendar, Utensils, Car, Home, ShoppingBag, X, Trophy, Medal, Award } from 'lucide-react'
+import { ArrowLeft, Plus, Users, Calendar, Utensils, Car, Home, ShoppingBag, X, Trophy, Medal, Award, Lock, Upload, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { createClient } from '@/lib/supabase/client'
+import { CakesAPI } from '@/lib/api/cakes'
+import { IngredientsAPI } from '@/lib/api/ingredients'
+import { UsersAPI } from '@/lib/api/users'
+import { useCurrentUser } from '@/hooks/use-current-user'
+import { ICON_OPTIONS } from '@/lib/constants'
+import type { Cake, CakeIngredient, User } from '@/types/database'
+
+type MemberWithBalance = User & {
+  balance: number
+}
+
+type ExpenseWithDetails = CakeIngredient & {
+  paidByUser?: User
+  totalAmount: number
+  yourShare: number
+}
 
 export default function GroupDetailPage({ params }: { params: { groupId: string } }) {
   const { groupId } = params
+  const { user: currentUser } = useCurrentUser()
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [cake, setCake] = useState<Cake | null>(null)
+  const [members, setMembers] = useState<MemberWithBalance[]>([])
+  const [expenses, setExpenses] = useState<ExpenseWithDetails[]>([])
+  const [isMember, setIsMember] = useState<boolean | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [newExpense, setNewExpense] = useState({
     description: '',
     amount: '',
@@ -18,87 +44,284 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     date: new Date().toISOString().split('T')[0]
   })
 
-  // Mock group data
-  const group = {
-    id: groupId,
-    name: 'Weekend Trip',
-    icon: '🏖️',
-    totalExpenses: 1250.50,
-    yourBalance: 125.75,
-    members: [
-      { id: '1', name: 'You', avatar: '👤', balance: 125.75 },
-      { id: '2', name: 'Sarah', avatar: '👩', balance: 245.50 },
-      { id: '3', name: 'Mike', avatar: '👨', balance: -85.30 },
-      { id: '4', name: 'Alex', avatar: '🧑', balance: -143.13 }
-    ]
-  }
+  useEffect(() => {
+    async function fetchCakeData() {
+      try {
+        setLoading(true)
+        setError(null)
 
-  const leaderboard = [...group.members]
+        const cakeId = parseInt(groupId)
+        if (isNaN(cakeId)) {
+          setError('Invalid cake ID')
+          return
+        }
+
+        const supabase = createClient()
+        const cakesAPI = new CakesAPI(supabase)
+        const ingredientsAPI = new IngredientsAPI(supabase)
+        const usersAPI = new UsersAPI(supabase)
+
+        // Fetch cake
+        const { data: cakeData, error: cakeError } = await cakesAPI.getCake(cakeId)
+        if (cakeError || !cakeData) {
+          setError(cakeError?.message || 'Cake not found')
+          return
+        }
+        setCake(cakeData)
+
+        // Check if current user is a member
+        if (currentUser) {
+          const userIsMember = cakeData.member_ids?.includes(currentUser.id) ?? false
+          setIsMember(userIsMember)
+          
+          // If user is not a member, don't fetch sensitive data
+          if (!userIsMember) {
+            setLoading(false)
+            return
+          }
+        } else {
+          // No user logged in, can't be a member
+          setIsMember(false)
+          setLoading(false)
+          return
+        }
+
+        // Fetch members
+        if (cakeData.member_ids && cakeData.member_ids.length > 0) {
+          const { data: memberUsers, error: membersError } = await usersAPI.validateUserIds(cakeData.member_ids)
+          if (membersError) {
+            console.error('Error fetching members:', membersError)
+          } else if (memberUsers) {
+            // Calculate balances from current_balances array
+            const balances = cakeData.current_balances || []
+            const membersWithBalances: MemberWithBalance[] = memberUsers.map((member, index) => ({
+              ...member,
+              balance: parseFloat(balances[index] || '0')
+            }))
+            setMembers(membersWithBalances)
+          }
+        }
+
+        // Fetch ingredients
+        const { data: ingredientsData, error: ingredientsError } = await ingredientsAPI.getCakeIngredients(cakeId)
+        if (ingredientsError) {
+          console.error('Error fetching ingredients:', ingredientsError)
+        } else if (ingredientsData) {
+          // Enrich ingredients with user data and calculate shares
+          const enrichedExpenses: ExpenseWithDetails[] = await Promise.all(
+            ingredientsData.map(async (ingredient) => {
+              // Calculate total amount from amounts array
+              const amounts = ingredient.amounts || []
+              const totalAmount = amounts.reduce((sum, amt) => sum + parseFloat(amt || '0'), 0)
+
+              // Get payer user data
+              let paidByUser: User | undefined
+              if (ingredient.payer_ids && ingredient.payer_ids.length > 0) {
+                const { data: payerUser } = await usersAPI.getUser(ingredient.payer_ids[0])
+                paidByUser = payerUser || undefined
+              }
+
+              // Calculate user's share
+              let yourShare = 0
+              if (currentUser && ingredient.weights && ingredient.payer_ids) {
+                const userIndex = cakeData.member_ids?.indexOf(currentUser.id) ?? -1
+                if (userIndex >= 0 && ingredient.weights[userIndex]) {
+                  const totalWeight = ingredient.weights.reduce((sum, w) => sum + (w || 0), 0)
+                  const userWeight = ingredient.weights[userIndex] || 0
+                  if (totalWeight > 0) {
+                    yourShare = (totalAmount * userWeight) / totalWeight
+                  }
+                }
+                // If user paid, subtract their payment
+                if (ingredient.payer_ids.includes(currentUser.id)) {
+                  const payerIndex = ingredient.payer_ids.indexOf(currentUser.id)
+                  const paidAmount = parseFloat(amounts[payerIndex] || '0')
+                  yourShare -= paidAmount
+                }
+              }
+
+              return {
+                ...ingredient,
+                paidByUser,
+                totalAmount,
+                yourShare
+              }
+            })
+          )
+          setExpenses(enrichedExpenses)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load cake data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCakeData()
+  }, [groupId, currentUser])
+
+  // Calculate totals and current user balance
+  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.totalAmount, 0)
+  const yourBalance = currentUser 
+    ? members.find(m => m.id === currentUser.id)?.balance || 0
+    : 0
+
+  // Count pending ingredients (not yet submitted on-chain)
+  const pendingIngredientsCount = expenses.filter(exp => exp.status === 'pending').length
+
+  const leaderboard = [...members]
     .sort((a, b) => b.balance - a.balance)
     .slice(0, 3)
 
-  const expenses = [
-    {
-      id: 1,
-      description: 'Beach Resort Dinner',
-      amount: 245.50,
-      category: 'food',
-      paidBy: 'Sarah',
-      splitBetween: ['You', 'Sarah', 'Mike', 'Alex'],
-      yourShare: -61.38,
-      date: '2024-01-15'
-    },
-    {
-      id: 2,
-      description: 'Gas for Road Trip',
-      amount: 85.00,
-      category: 'transport',
-      paidBy: 'You',
-      splitBetween: ['You', 'Sarah', 'Mike', 'Alex'],
-      yourShare: 63.75,
-      date: '2024-01-14'
-    },
-    {
-      id: 3,
-      description: 'Airbnb Stay',
-      amount: 680.00,
-      category: 'accommodation',
-      paidBy: 'Mike',
-      splitBetween: ['You', 'Sarah', 'Mike', 'Alex'],
-      yourShare: -170.00,
-      date: '2024-01-13'
-    },
-    {
-      id: 4,
-      description: 'Grocery Shopping',
-      amount: 125.50,
-      category: 'shopping',
-      paidBy: 'You',
-      splitBetween: ['You', 'Sarah', 'Mike'],
-      yourShare: 83.67,
-      date: '2024-01-13'
-    },
-    {
-      id: 5,
-      description: 'Pizza Night',
-      amount: 114.50,
-      category: 'food',
-      paidBy: 'Alex',
-      splitBetween: ['You', 'Sarah', 'Mike', 'Alex'],
-      yourShare: -28.63,
-      date: '2024-01-12'
+  const handleSubmitIngredients = async () => {
+    if (pendingIngredientsCount === 0) {
+      return
     }
-  ]
 
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'food': return <Utensils className="w-5 h-5" />
-      case 'transport': return <Car className="w-5 h-5" />
-      case 'accommodation': return <Home className="w-5 h-5" />
-      case 'shopping': return <ShoppingBag className="w-5 h-5" />
-      default: return <Utensils className="w-5 h-5" />
+    setIsSubmitting(true)
+    try {
+      // TODO: Implement on-chain submission
+      // This should:
+      // 1. Batch all pending ingredients
+      // 2. Call the smart contract's addBatchedCakeIngredients function
+      // 3. Update ingredient statuses to 'submitted' after successful transaction
+      // 4. Refresh the data
+      
+      alert(`Submitting ${pendingIngredientsCount} ingredient(s) on-chain...\n\nThis feature will be implemented to interact with the CakeFactory smart contract.`)
+      
+      // Placeholder for actual implementation:
+      // const supabase = createClient()
+      // const ingredientsAPI = new IngredientsAPI(supabase)
+      // const pendingIngredients = expenses.filter(exp => exp.status === 'pending')
+      // 
+      // // Batch and submit to blockchain
+      // // After successful submission:
+      // for (const ingredient of pendingIngredients) {
+      //   await ingredientsAPI.markIngredientSubmitted(ingredient.id, batchedIngredientsId)
+      // }
+      
+    } catch (error) {
+      console.error('Error submitting ingredients:', error)
+      alert('Failed to submit ingredients. Please try again.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
+
+  const getCategoryIcon = () => {
+    // Default to Utensils icon for expenses
+    return <Utensils className="w-5 h-5" />
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#F0F9F4] to-[#FFF9E5]">
+        <header className="border-b-4 border-[#FFB6D9] bg-white/80 backdrop-blur sticky top-0 z-50">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <Link href="/" className="flex items-center gap-3 group">
+                <div className="w-12 h-12 bg-[#FF69B4] pixel-art-shadow flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                  🍰
+                </div>
+                <span className="text-2xl font-bold pixel-text text-[#FF69B4]">CakePay</span>
+              </Link>
+              <ConnectButton />
+            </div>
+          </div>
+        </header>
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="text-center">
+            <div className="text-4xl mb-4">🍰</div>
+            <div className="text-xl font-bold pixel-text text-[#2D3748]">Loading cake...</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !cake) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#F0F9F4] to-[#FFF9E5]">
+        <header className="border-b-4 border-[#FFB6D9] bg-white/80 backdrop-blur sticky top-0 z-50">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <Link href="/" className="flex items-center gap-3 group">
+                <div className="w-12 h-12 bg-[#FF69B4] pixel-art-shadow flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                  🍰
+                </div>
+                <span className="text-2xl font-bold pixel-text text-[#FF69B4]">CakePay</span>
+              </Link>
+              <ConnectButton />
+            </div>
+          </div>
+        </header>
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-4 border-[#FF6B6B]">
+            <div className="text-center">
+              <div className="text-4xl mb-4">😞</div>
+              <div className="text-xl font-bold pixel-text text-[#2D3748] mb-2">Error loading cake</div>
+              <div className="text-sm text-[#4A5568] mb-4">{error || 'Cake not found'}</div>
+              <Link href="/dashboard">
+                <Button className="bg-[#FF69B4] hover:bg-[#FF1493] pixel-button">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Dashboard
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  // Check if user is a member - show unauthorized message if not
+  if (isMember === false) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#F0F9F4] to-[#FFF9E5]">
+        <header className="border-b-4 border-[#FFB6D9] bg-white/80 backdrop-blur sticky top-0 z-50">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <Link href="/" className="flex items-center gap-3 group">
+                <div className="w-12 h-12 bg-[#FF69B4] pixel-art-shadow flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                  🍰
+                </div>
+                <span className="text-2xl font-bold pixel-text text-[#FF69B4]">CakePay</span>
+              </Link>
+              <ConnectButton />
+            </div>
+          </div>
+        </header>
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-4 border-[#FF6B6B] max-w-md">
+            <div className="text-center">
+              <Lock className="w-16 h-16 text-[#FF6B6B] mx-auto mb-4" />
+              <div className="text-2xl font-bold pixel-text text-[#2D3748] mb-2">Access Restricted</div>
+              <div className="text-sm text-[#4A5568] mb-6">
+                {currentUser 
+                  ? "You don't have access to this cake. Only members can view cake details."
+                  : "Please connect your wallet and register to access this cake."}
+              </div>
+              {!currentUser && (
+                <div className="mb-6 flex justify-center">
+                  <ConnectButton />
+                </div>
+              )}
+              <Link href="/dashboard">
+                <Button className="bg-[#FF69B4] hover:bg-[#FF1493] pixel-button">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Dashboard
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  const cakeIcon = cake.icon_index !== null && cake.icon_index !== undefined 
+    ? ICON_OPTIONS[cake.icon_index] || '🍰'
+    : '🍰'
 
   const handleAddExpense = () => {
     console.log('[v0] Adding expense:', newExpense)
@@ -136,12 +359,7 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
             </Link>
             
             <div className="flex items-center gap-4">
-              <Button variant="outline" className="pixel-button border-2 border-[#B4E7CE]">
-                Connect Wallet
-              </Button>
-              <div className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl cursor-pointer hover:scale-110 transition-transform">
-                👤
-              </div>
+              <ConnectButton />
             </div>
           </div>
         </div>
@@ -164,14 +382,17 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
               <div className="flex flex-col md:flex-row md:items-center gap-6">
                 <div className="flex items-center gap-4 flex-1">
                   <div className="w-20 h-20 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-4xl flex-shrink-0">
-                    {group.icon}
+                    {cakeIcon}
                   </div>
                   
                   <div>
-                    <h1 className="text-3xl font-bold pixel-text text-[#2D3748] mb-2">{group.name}</h1>
+                    <h1 className="text-3xl font-bold pixel-text text-[#2D3748] mb-2">{cake.name}</h1>
+                    {cake.description && (
+                      <p className="text-sm text-[#4A5568] mb-2">{cake.description}</p>
+                    )}
                     <div className="flex items-center gap-2 text-[#4A5568]">
                       <Users className="w-4 h-4" />
-                      <span>{group.members.length} members</span>
+                      <span>{members.length} members</span>
                     </div>
                   </div>
                 </div>
@@ -179,157 +400,200 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                 <div className="text-right">
                   <div className="text-sm text-[#4A5568] mb-1">Total Expenses</div>
                   <div className="text-3xl font-bold pixel-text text-[#FF69B4]">
-                    ${group.totalExpenses.toFixed(2)}
+                    ${totalExpenses.toFixed(2)}
                   </div>
                 </div>
               </div>
 
               {/* Member Avatars */}
               <div className="flex items-center gap-3 mt-6 flex-wrap">
-                {group.members.map((member) => (
+                {members.map((member) => (
                   <div key={member.id} className="flex flex-col items-center gap-1">
                     <div className="w-12 h-12 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl hover:scale-110 transition-transform cursor-pointer">
-                      {member.avatar}
+                      {member.avatar_url ? (
+                        <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                      ) : (
+                        <span>{member.username.charAt(0).toUpperCase()}</span>
+                      )}
                     </div>
-                    <span className="text-xs text-[#4A5568]">{member.name}</span>
+                    <span className="text-xs text-[#4A5568]">{member.username}</span>
                   </div>
                 ))}
               </div>
             </Card>
 
             {/* Balance Section */}
-            <Card className={`p-6 mb-6 pixel-card backdrop-blur border-4 ${
-              group.yourBalance > 0 
-                ? 'bg-[#5DD39E]/10 border-[#5DD39E]' 
-                : group.yourBalance < 0 
-                ? 'bg-[#FF6B6B]/10 border-[#FF6B6B]'
-                : 'bg-gray-100 border-gray-300'
-            }`}>
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <div className="text-sm text-[#4A5568] mb-2">Your Balance</div>
-                  <div className={`text-4xl font-bold pixel-text ${
-                    group.yourBalance > 0 
-                      ? 'text-[#5DD39E]' 
-                      : group.yourBalance < 0 
-                      ? 'text-[#FF6B6B]'
-                      : 'text-gray-500'
-                  }`}>
-                    {group.yourBalance > 0 ? '+' : ''}${Math.abs(group.yourBalance).toFixed(2)}
+            {currentUser && (
+              <Card className={`p-6 mb-6 pixel-card backdrop-blur border-4 ${
+                yourBalance > 0 
+                  ? 'bg-[#5DD39E]/10 border-[#5DD39E]' 
+                  : yourBalance < 0 
+                  ? 'bg-[#FF6B6B]/10 border-[#FF6B6B]'
+                  : 'bg-gray-100 border-gray-300'
+              }`}>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm text-[#4A5568] mb-2">Your Balance</div>
+                    <div className={`text-4xl font-bold pixel-text ${
+                      yourBalance > 0 
+                        ? 'text-[#5DD39E]' 
+                        : yourBalance < 0 
+                        ? 'text-[#FF6B6B]'
+                        : 'text-gray-500'
+                    }`}>
+                      {yourBalance > 0 ? '+' : ''}${Math.abs(yourBalance).toFixed(2)}
+                    </div>
+                    <div className={`text-sm mt-1 ${
+                      yourBalance > 0 
+                        ? 'text-[#5DD39E]' 
+                        : yourBalance < 0 
+                        ? 'text-[#FF6B6B]'
+                        : 'text-gray-500'
+                    }`}>
+                      {yourBalance > 0 
+                        ? 'You are owed' 
+                        : yourBalance < 0 
+                        ? 'You owe'
+                        : 'All settled up'}
+                    </div>
                   </div>
-                  <div className={`text-sm mt-1 ${
-                    group.yourBalance > 0 
-                      ? 'text-[#5DD39E]' 
-                      : group.yourBalance < 0 
-                      ? 'text-[#FF6B6B]'
-                      : 'text-gray-500'
-                  }`}>
-                    {group.yourBalance > 0 
-                      ? 'You are owed' 
-                      : group.yourBalance < 0 
-                      ? 'You owe'
-                      : 'All settled up'}
-                  </div>
-                </div>
 
-                {group.yourBalance !== 0 && (
-                  <Link href={`/dashboard/${groupId}/settle`}>
-                    <Button className="bg-[#FF69B4] hover:bg-[#FF1493] pixel-button shadow-lg hover:shadow-xl transition-all hover:-translate-y-1">
-                      <div className="mr-2 text-xl">🍰</div>
-                      Settle Up
-                    </Button>
-                  </Link>
-                )}
-              </div>
-            </Card>
+                  {yourBalance !== 0 && (
+                    <Link href={`/dashboard/${groupId}/settle`}>
+                      <Button className="bg-[#FF69B4] hover:bg-[#FF1493] pixel-button shadow-lg hover:shadow-xl transition-all hover:-translate-y-1">
+                        <div className="mr-2 text-xl">🍰</div>
+                        Settle Up
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </Card>
+            )}
 
             {/* Expense List */}
             <div className="mb-24">
               <h2 className="text-2xl font-bold pixel-text text-[#2D3748] mb-4">Expenses</h2>
               
-              <div className="space-y-3">
-                {expenses.map((expense) => (
-                  <Card 
-                    key={expense.id}
-                    className="p-4 pixel-card bg-white/80 backdrop-blur border-3 border-[#E9D5FF] hover:border-[#FFB6D9] transition-all cursor-pointer hover:-translate-y-1"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-[#FF69B4] flex-shrink-0">
-                        {getCategoryIcon(expense.category)}
-                      </div>
+              {expenses.length === 0 ? (
+                <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-3 border-[#E9D5FF] text-center">
+                  <div className="text-4xl mb-4">🥧</div>
+                  <div className="text-lg font-bold pixel-text text-[#2D3748] mb-2">No expenses yet</div>
+                  <div className="text-sm text-[#4A5568]">Add your first expense to get started!</div>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {expenses.map((expense) => (
+                    <Card 
+                      key={expense.id}
+                      className="p-4 pixel-card bg-white/80 backdrop-blur border-3 border-[#E9D5FF] hover:border-[#FFB6D9] transition-all cursor-pointer hover:-translate-y-1"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-[#FF69B4] flex-shrink-0">
+                          {getCategoryIcon()}
+                        </div>
 
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold pixel-text text-[#2D3748] mb-1">{expense.description}</h3>
-                        <div className="text-sm text-[#4A5568] flex items-center gap-3 flex-wrap">
-                          <span>{expense.paidBy} paid ${expense.amount.toFixed(2)}</span>
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {new Date(expense.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </span>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold pixel-text text-[#2D3748] mb-1">{expense.name}</h3>
+                          {expense.description && (
+                            <p className="text-xs text-[#718096] mb-1">{expense.description}</p>
+                          )}
+                          <div className="text-sm text-[#4A5568] flex items-center gap-3 flex-wrap">
+                            <span>
+                              {expense.paidByUser?.username || 'Unknown'} paid ${expense.totalAmount.toFixed(2)}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {new Date(expense.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                            {expense.status && (
+                              <span className={`px-2 py-1 rounded text-xs ${
+                                expense.status === 'settled' ? 'bg-[#5DD39E]/20 text-[#5DD39E]' :
+                                expense.status === 'submitted' ? 'bg-[#FFD700]/20 text-[#FFA500]' :
+                                'bg-[#E9D5FF]/20 text-[#4A5568]'
+                              }`}>
+                                {expense.status}
+                              </span>
+                            )}
+                          </div>
+                          {expense.weights && (
+                            <div className="text-xs text-[#718096] mt-1">
+                              Split between {expense.weights.filter(w => w && w > 0).length} people
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs text-[#718096] mt-1">
-                          Split between {expense.splitBetween.length} people
-                        </div>
-                      </div>
 
-                      <div className="text-right flex-shrink-0">
-                        <div className={`text-xl font-bold pixel-text ${
-                          expense.yourShare > 0 ? 'text-[#5DD39E]' : 'text-[#FF6B6B]'
-                        }`}>
-                          {expense.yourShare > 0 ? '+' : ''}${Math.abs(expense.yourShare).toFixed(2)}
-                        </div>
-                        <div className={`text-xs ${
-                          expense.yourShare > 0 ? 'text-[#5DD39E]' : 'text-[#FF6B6B]'
-                        }`}>
-                          {expense.yourShare > 0 ? 'You get back' : 'You owe'}
-                        </div>
+                        {currentUser && (
+                          <div className="text-right flex-shrink-0">
+                            <div className={`text-xl font-bold pixel-text ${
+                              expense.yourShare > 0 ? 'text-[#5DD39E]' : expense.yourShare < 0 ? 'text-[#FF6B6B]' : 'text-gray-500'
+                            }`}>
+                              {expense.yourShare > 0 ? '+' : ''}${Math.abs(expense.yourShare).toFixed(2)}
+                            </div>
+                            <div className={`text-xs ${
+                              expense.yourShare > 0 ? 'text-[#5DD39E]' : expense.yourShare < 0 ? 'text-[#FF6B6B]' : 'text-gray-500'
+                            }`}>
+                              {expense.yourShare > 0 ? 'You get back' : expense.yourShare < 0 ? 'You owe' : 'Settled'}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           <div className="lg:col-span-1">
-            <Card className="p-6 pixel-card bg-white/80 backdrop-blur border-4 border-[#E9D5FF] sticky top-24">
+            <div className="sticky top-24 space-y-6">
+            <Card className="p-6 pixel-card bg-white/80 backdrop-blur border-4 border-[#E9D5FF]">
               <div className="flex items-center gap-2 mb-6">
                 <Trophy className="w-6 h-6 text-[#FFD700]" />
                 <h2 className="text-2xl font-bold pixel-text text-[#2D3748]">Top Balances</h2>
               </div>
 
-              <div className="space-y-4">
-                {leaderboard.map((member, index) => (
-                  <div 
-                    key={member.id}
-                    className={`flex items-center gap-3 p-4 rounded-lg pixel-art-shadow transition-all hover:-translate-y-1 cursor-pointer
-                      ${index === 0 ? 'bg-gradient-to-r from-[#FFD700]/20 to-[#FFA500]/20 border-2 border-[#FFD700]' : 
-                        index === 1 ? 'bg-gradient-to-r from-[#C0C0C0]/20 to-[#A8A8A8]/20 border-2 border-[#C0C0C0]' : 
-                        'bg-gradient-to-r from-[#CD7F32]/20 to-[#B8860B]/20 border-2 border-[#CD7F32]'}`}
-                  >
-                    <div className="flex-shrink-0">
-                      {index === 0 && <Trophy className="w-6 h-6 text-[#FFD700]" />}
-                      {index === 1 && <Medal className="w-6 h-6 text-[#C0C0C0]" />}
-                      {index === 2 && <Award className="w-6 h-6 text-[#CD7F32]" />}
-                    </div>
-                    
-                    <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl">
-                      {member.avatar}
-                    </div>
-                    
-                    <div className="flex-1">
-                      <div className="font-bold pixel-text text-[#2D3748]">{member.name}</div>
-                      <div className={`text-sm ${member.balance >= 0 ? 'text-[#5DD39E]' : 'text-[#FF6B6B]'}`}>
-                        {member.balance >= 0 ? '+' : ''}${member.balance.toFixed(2)}
+              {leaderboard.length === 0 ? (
+                <div className="text-center text-sm text-[#718096] py-4">
+                  No members yet
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {leaderboard.map((member, index) => (
+                    <div 
+                      key={member.id}
+                      className={`flex items-center gap-3 p-4 rounded-lg pixel-art-shadow transition-all hover:-translate-y-1 cursor-pointer
+                        ${index === 0 ? 'bg-gradient-to-r from-[#FFD700]/20 to-[#FFA500]/20 border-2 border-[#FFD700]' : 
+                          index === 1 ? 'bg-gradient-to-r from-[#C0C0C0]/20 to-[#A8A8A8]/20 border-2 border-[#C0C0C0]' : 
+                          'bg-gradient-to-r from-[#CD7F32]/20 to-[#B8860B]/20 border-2 border-[#CD7F32]'}`}
+                    >
+                      <div className="flex-shrink-0">
+                        {index === 0 && <Trophy className="w-6 h-6 text-[#FFD700]" />}
+                        {index === 1 && <Medal className="w-6 h-6 text-[#C0C0C0]" />}
+                        {index === 2 && <Award className="w-6 h-6 text-[#CD7F32]" />}
+                      </div>
+                      
+                      <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl">
+                        {member.avatar_url ? (
+                          <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                        ) : (
+                          <span>{member.username.charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                      
+                      <div className="flex-1">
+                        <div className="font-bold pixel-text text-[#2D3748]">{member.username}</div>
+                        <div className={`text-sm ${member.balance >= 0 ? 'text-[#5DD39E]' : 'text-[#FF6B6B]'}`}>
+                          {member.balance >= 0 ? '+' : ''}${member.balance.toFixed(2)}
+                        </div>
+                      </div>
+                      
+                      <div className="text-2xl font-bold pixel-text text-[#FF69B4]">
+                        #{index + 1}
                       </div>
                     </div>
-                    
-                    <div className="text-2xl font-bold pixel-text text-[#FF69B4]">
-                      #{index + 1}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
               <div className="mt-6 pt-6 border-t-2 border-[#E9D5FF]">
                 <div className="text-xs text-center text-[#718096]">
@@ -337,6 +601,76 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                 </div>
               </div>
             </Card>
+
+            {/* Pending Ingredients Widget */}
+            <Card className={`p-6 pixel-card backdrop-blur border-4 ${
+              pendingIngredientsCount > 0
+                ? 'bg-[#FF6B6B]/10 border-[#FF6B6B]'
+                : 'bg-gray-100/80 border-gray-300'
+            }`}>
+              <div className="flex items-center gap-2 mb-4">
+                <Upload className={`w-5 h-5 ${
+                  pendingIngredientsCount > 0 ? 'text-[#FF6B6B]' : 'text-gray-500'
+                }`} />
+                <h2 className="text-xl font-bold pixel-text text-[#2D3748]">Expenses pending on-chain Submission</h2>
+              </div>
+
+              {pendingIngredientsCount === 0 ? (
+                <div className="text-center py-4">
+                  <div className="text-3xl mb-2">✅</div>
+                  <div className="text-sm text-gray-500 font-medium">
+                    All ingredients submitted
+                  </div>
+                  <div className="text-xs text-[#718096] mt-1">
+                    No pending ingredients to submit on-chain
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-sm text-[#4A5568] mb-2">Pending Ingredients</div>
+                    <div className={`text-4xl font-bold pixel-text ${
+                      pendingIngredientsCount > 0 ? 'text-[#FF6B6B]' : 'text-gray-500'
+                    }`}>
+                      {pendingIngredientsCount}
+                    </div>
+                    <div className={`text-sm mt-1 ${
+                      pendingIngredientsCount > 0 ? 'text-[#FF6B6B]' : 'text-gray-500'
+                    }`}>
+                      {pendingIngredientsCount === 1 
+                        ? 'ingredient ready to submit on-chain'
+                        : 'ingredients ready to submit on-chain'}
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleSubmitIngredients}
+                    disabled={isSubmitting || pendingIngredientsCount === 0}
+                    className="w-full bg-[#FF6B6B] hover:bg-[#FF5252] text-white pixel-button shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Submit on-chain
+                      </>
+                    )}
+                  </Button>
+
+                  <div className="flex items-start gap-2 text-xs text-[#718096] bg-white/50 p-2 rounded">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div>
+                      Submitting ingredients will batch and add them to the blockchain. This action requires a wallet transaction.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
+            </div>
           </div>
         </div>
 
@@ -412,21 +746,25 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                     Paid by
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {group.members.map((member) => (
+                    {members.map((member) => (
                       <button
                         key={member.id}
-                        onClick={() => setNewExpense({ ...newExpense, paidBy: member.id })}
+                        onClick={() => setNewExpense({ ...newExpense, paidBy: member.id.toString() })}
                         className={`p-3 border-3 rounded pixel-art-shadow transition-all hover:-translate-y-1 ${
-                          newExpense.paidBy === member.id
+                          newExpense.paidBy === member.id.toString()
                             ? 'border-[#FF69B4] bg-[#FFB6D9]/20'
                             : 'border-[#E9D5FF] bg-white hover:border-[#FFB6D9]'
                         }`}
                       >
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg">
-                            {member.avatar}
+                            {member.avatar_url ? (
+                              <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                            ) : (
+                              <span>{member.username.charAt(0).toUpperCase()}</span>
+                            )}
                           </div>
-                          <span className="font-bold pixel-text text-sm">{member.name}</span>
+                          <span className="font-bold pixel-text text-sm">{member.username}</span>
                         </div>
                       </button>
                     ))}
@@ -439,30 +777,34 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                     Split between
                   </label>
                   <div className="grid grid-cols-2 gap-2 mb-3">
-                    {group.members.map((member) => (
+                    {members.map((member) => (
                       <button
                         key={member.id}
-                        onClick={() => toggleMember(member.id)}
+                        onClick={() => toggleMember(member.id.toString())}
                         className={`p-3 border-3 rounded pixel-art-shadow transition-all hover:-translate-y-1 ${
-                          newExpense.splitBetween.includes(member.id)
+                          newExpense.splitBetween.includes(member.id.toString())
                             ? 'border-[#B4E7CE] bg-[#B4E7CE]/20'
                             : 'border-[#E9D5FF] bg-white hover:border-[#B4E7CE]'
                         }`}
                       >
                         <div className="flex items-center gap-2">
                           <div className={`w-5 h-5 border-2 rounded flex items-center justify-center ${
-                            newExpense.splitBetween.includes(member.id)
+                            newExpense.splitBetween.includes(member.id.toString())
                               ? 'border-[#5DD39E] bg-[#5DD39E]'
                               : 'border-[#E9D5FF]'
                           }`}>
-                            {newExpense.splitBetween.includes(member.id) && (
+                            {newExpense.splitBetween.includes(member.id.toString()) && (
                               <span className="text-white text-xs">✓</span>
                             )}
                           </div>
                           <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg">
-                            {member.avatar}
+                            {member.avatar_url ? (
+                              <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                            ) : (
+                              <span>{member.username.charAt(0).toUpperCase()}</span>
+                            )}
                           </div>
-                          <span className="font-bold pixel-text text-sm">{member.name}</span>
+                          <span className="font-bold pixel-text text-sm">{member.username}</span>
                         </div>
                       </button>
                     ))}

@@ -116,3 +116,61 @@ cake_ingredients
   └── updated_at (TIMESTAMPTZ)
 ```
 
+## Initialize Test Users
+
+The `init-test-users.sql` script populates your database with 10 generic test users for development and testing purposes.
+
+### Quick Start
+
+1. Go to your Supabase project dashboard
+2. Navigate to: **SQL Editor** → https://supabase.com/dashboard/project/YOUR_PROJECT/sql
+3. Open the file: `scripts/init-test-users.sql`
+4. Copy the entire contents
+5. Paste into the SQL Editor
+6. Click **Run**
+
+### What the Script Does
+
+1. **Creates 10 test users** with:
+   - Unique wallet addresses (using simple patterns like `0x1111...`, `0x2222...`, etc.)
+   - Unique usernames (alice_crypto, bob_blockchain, charlie_web3, etc.)
+   - No avatar URLs (set to NULL)
+
+2. **Handles duplicates gracefully**: Uses `ON CONFLICT` to update existing users if the script is run multiple times
+
+3. **Verifies creation**: Shows a query result with the created users
+
+### Test Users Created
+
+The script creates the following users:
+
+| Username | Wallet Address Pattern |
+|----------|------------------------|
+| alice_crypto | 0x1111... |
+| bob_blockchain | 0x2222... |
+| charlie_web3 | 0x3333... |
+| diana_defi | 0x4444... |
+| eve_ethereum | 0x5555... |
+| frank_finance | 0x6666... |
+| grace_gas | 0x7777... |
+| henry_hash | 0x8888... |
+| ivy_innovation | 0x9999... |
+| jack_javascript | 0xAAAA... |
+
+### Usage Notes
+
+- **Safe to run multiple times**: The script uses `ON CONFLICT` handling, so running it multiple times will update existing users rather than creating duplicates
+- **Development only**: These are test users with simple wallet address patterns - do not use in production
+- **After running**: You can use these user IDs when creating test cakes and ingredients
+
+### Verification
+
+After running the script, you should see output showing 10 users with their IDs, wallet addresses, and usernames. You can also verify by running:
+
+```sql
+SELECT id, wallet_address, username, created_at
+FROM users
+ORDER BY id
+LIMIT 10;
+```
+
