@@ -46,10 +46,12 @@ contract CakeFactory {
     mapping(uint128 => Cake) public cakes;
 
     // Mapping for cake id to its ingredients
+    // Nested mapping: cake ID -> batched ingredient ID (uint64) -> batched ingredients struct
     mapping(uint128 => mapping(uint64 => BatchedCakeIngredients)) public batchedIngredientsPerCake;
 
-    // Mapping from user Ids to mapping of cakes its participating in and whete it has debts to the cake
+    // Mapping from user Ids to mapping of cakes its participating in and where it has debts to the cake
     mapping(uint64 => mapping(uint128 => bool)) public userCakes;
+    // Mapping from cake ID to mapping of member ID to member index in cake arrays
     mapping(uint128 => mapping(uint64 => uint64)) public cakeMemberIndex; // quick lookup for member index in cake arrays
 
     // Total number of users registered
@@ -441,16 +443,18 @@ contract CakeFactory {
         return (cake.memberIds, cake.currentBalances, cake.interestRate, cake.active, cake.token);
     }
 
-    // /**
-    //  * @notice Gets all members of a cake
-    //  * @param cakeId The ID of the cake
-    //  * @return Array of member ids
-    //  */
-    // function getCakeMembers(uint128 cakeId) public view returns (uint64[] memory) {
-    //     // Check if cake exists (createdAt will be non-zero if cake was created)
-    //     require(cakes[cakeId].createdAt != 0, "Cake does not exist");
-    //     return cakes[cakeId].memberIds;
-    // }
+    /**
+     * @notice Gets all members of a cake
+     * @param cakeId The ID of the cake
+     * @return Array of member ids
+     */
+    function getCakeMembers(uint128 cakeId) public view returns (uint64[] memory) {
+        Cake storage cake = cakes[cakeId];
+        if (cake.createdAt == 0) {
+            revert CakeDoesNotExist(cakeId);
+        }
+        return cake.memberIds;
+    }
 
     /**
      * @notice Gets cake ingredient details
@@ -484,17 +488,25 @@ contract CakeFactory {
         return (ingredient.weights, ingredient.payerIds, ingredient.payedAmounts, ingredient.createdAt);
     }
 
-    // /**
-    //  * @notice Gets the current balance of a member in a cake
-    //  * @param cakeId ID of the cake
-    //  * @param memberId ID of the member
-    //  * @return Current balance of the member
-    //  */
-    // function getCakeMemberBalance(uint128 cakeId, uint64 memberId) public view returns (uint256) {
-    //     // Check if cake exists (createdAt will be non-zero if cake was created)
-    //     require(cakes[cakeId].createdAt != 0, "Cake does not exist");
-    //     return cakes[cakeId].currentBalances[memberId];
-    // }
+    /**
+     * @notice Gets the current balance of a member in a cake
+     * @param cakeId ID of the cake
+     * @param memberId ID of the member
+     * @return Current balance of the member
+     */
+    function getCakeMemberBalance(uint128 cakeId, uint64 memberId) public view returns (int256) {
+        Cake storage cake = cakes[cakeId];
+        if (cake.createdAt == 0) {
+            revert CakeDoesNotExist(cakeId);
+        }
+
+        uint64 indexPlusOne = cakeMemberIndex[cakeId][memberId];
+        if (indexPlusOne == 0) {
+            revert NotMember(memberId);
+        }
+
+        return cake.currentBalances[uint256(indexPlusOne - 1)];
+    }
 
     // /**
     //  * @notice Gets the user ID for a given address
