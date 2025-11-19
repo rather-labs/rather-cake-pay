@@ -2,41 +2,18 @@
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Plus, Users, TrendingUp, TrendingDown, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
+import { useCakes } from '@/hooks/use-cakes'
+import { TEST_USER_ID } from '@/lib/constants'
 
 export default function Dashboard() {
+  const { cakes, loading, error } = useCakes(TEST_USER_ID)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [groupName, setGroupName] = useState('')
   const [selectedIcon, setSelectedIcon] = useState('🍰')
   const [members, setMembers] = useState<string[]>([''])
-  const [groups, setGroups] = useState([
-    {
-      id: 1,
-      name: 'Weekend Trip',
-      icon: '🏖️',
-      totalExpenses: 1250.50,
-      yourBalance: 125.75,
-      members: 4
-    },
-    {
-      id: 2,
-      name: 'Roommates',
-      icon: '🏠',
-      totalExpenses: 890.00,
-      yourBalance: -45.20,
-      members: 3
-    },
-    {
-      id: 3,
-      name: 'Dinner Squad',
-      icon: '🍕',
-      totalExpenses: 345.80,
-      yourBalance: 67.40,
-      members: 5
-    }
-  ])
 
   const iconOptions = ['🍰', '🏖️', '🏠', '🍕', '✈️', '🎉', '🎮', '🏃', '🎬', '☕', '🍔', '🎸']
 
@@ -54,20 +31,12 @@ export default function Dashboard() {
     setMembers(newMembers)
   }
 
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
     if (!groupName.trim()) return
-    
-    const validMembers = members.filter(m => m.trim() !== '')
-    const newGroup = {
-      id: groups.length + 1,
-      name: groupName,
-      icon: selectedIcon,
-      totalExpenses: 0,
-      yourBalance: 0,
-      members: validMembers.length + 1 // +1 for the current user
-    }
-    
-    setGroups([...groups, newGroup])
+
+    // TODO: Implement real cake creation with Supabase
+    console.log('Creating group:', { groupName, selectedIcon, members })
+
     setShowCreateModal(false)
     setGroupName('')
     setSelectedIcon('🍰')
@@ -114,68 +83,64 @@ export default function Dashboard() {
               </Button>
             </div>
 
-            <div className="grid gap-4">
-              {groups.map((group) => (
-                <Link key={group.id} href={`/dashboard/${group.id}`}>
-                  <Card 
-                    className="p-6 pixel-card bg-white/80 backdrop-blur border-4 border-[#FFB6D9] hover:border-[#FF69B4] cursor-pointer transition-all hover:-translate-y-1 hover:shadow-xl"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="w-16 h-16 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-3xl">
-                          {group.icon}
-                        </div>
-                        
-                        <div className="flex-1">
-                          <h3 className="text-xl font-bold pixel-text text-[#2D3748] mb-1">{group.name}</h3>
-                          <div className="flex items-center gap-4 text-sm text-[#4A5568]">
-                            <div className="flex items-center gap-1">
-                              <Users className="w-4 h-4" />
-                              {group.members} members
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="text-4xl mb-4 animate-bounce">🍰</div>
+                <p className="text-[#4A5568]">Loading your groups...</p>
+              </div>
+            ) : error ? (
+              <Card className="p-6 pixel-card bg-[#FF6B6B]/10 border-4 border-[#FF6B6B]">
+                <p className="text-[#FF6B6B]">Error loading groups: {error.message}</p>
+              </Card>
+            ) : cakes.length > 0 ? (
+              <div className="grid gap-4">
+                {cakes.map((cake) => (
+                  <Link key={cake.id} href={`/dashboard/${cake.id}`}>
+                    <Card
+                      className="p-6 pixel-card bg-white/80 backdrop-blur border-4 border-[#FFB6D9] hover:border-[#FF69B4] cursor-pointer transition-all hover:-translate-y-1 hover:shadow-xl"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="w-16 h-16 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-3xl">
+                            🍰
+                          </div>
+
+                          <div className="flex-1">
+                            <h3 className="text-xl font-bold pixel-text text-[#2D3748] mb-1">{cake.name}</h3>
+                            <div className="flex items-center gap-4 text-sm text-[#4A5568]">
+                              {cake.description && <span>{cake.description}</span>}
                             </div>
-                            <div>Total: ${group.totalExpenses.toFixed(2)}</div>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-sm text-[#4A5568]">
+                            View Details →
                           </div>
                         </div>
                       </div>
-
-                      <div className="text-right">
-                        <div className={`text-2xl font-bold pixel-text ${group.yourBalance >= 0 ? 'text-[#5DD39E]' : 'text-[#FF6B6B]'}`}>
-                          {group.yourBalance >= 0 ? '+' : ''}${Math.abs(group.yourBalance).toFixed(2)}
-                        </div>
-                        <div className={`flex items-center gap-1 text-sm ${group.yourBalance >= 0 ? 'text-[#5DD39E]' : 'text-[#FF6B6B]'}`}>
-                          {group.yourBalance >= 0 ? (
-                            <>
-                              <TrendingUp className="w-4 h-4" />
-                              You are owed
-                            </>
-                          ) : (
-                            <>
-                              <TrendingDown className="w-4 h-4" />
-                              You owe
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                </Link>
-              ))}
-            </div>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           {/* Empty State for New Users */}
-          <Card className="p-12 pixel-card bg-gradient-to-br from-[#FFB6D9]/20 to-[#B4E7CE]/20 border-4 border-dashed border-[#FFB6D9] text-center">
-            <div className="text-6xl mb-4">🎂</div>
-            <h3 className="text-xl font-bold pixel-text text-[#2D3748] mb-2">No more groups yet</h3>
-            <p className="text-[#4A5568] mb-6">Create your first group to start splitting expenses with friends!</p>
-            <Button 
-              onClick={() => setShowCreateModal(true)}
-              className="bg-[#B4E7CE] hover:bg-[#5DD39E] text-[#2D3748] pixel-button"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              Create Your First Group
-            </Button>
-          </Card>
+          {!loading && cakes.length === 0 && (
+            <Card className="p-12 pixel-card bg-gradient-to-br from-[#FFB6D9]/20 to-[#B4E7CE]/20 border-4 border-dashed border-[#FFB6D9] text-center">
+              <div className="text-6xl mb-4">🎂</div>
+              <h3 className="text-xl font-bold pixel-text text-[#2D3748] mb-2">No groups yet</h3>
+              <p className="text-[#4A5568] mb-6">Create your first group to start splitting expenses with friends!</p>
+              <Button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-[#B4E7CE] hover:bg-[#5DD39E] text-[#2D3748] pixel-button"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Create Your First Group
+              </Button>
+            </Card>
+          )}
         </div>
       </div>
 

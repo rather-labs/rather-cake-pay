@@ -8,10 +8,6 @@ export type CakeWithMembers = Cake & {
   created_by_user: User
 }
 
-type CakeMemberWithCake = {
-  cakes: Cake
-}
-
 export class CakesAPI {
   constructor(private supabase: SupabaseClient<Database>) {}
 
@@ -39,18 +35,29 @@ export class CakesAPI {
 
   async getUserCakes(userId: string): Promise<{ data: Cake[] | null; error: Error | null }> {
     try {
-      const { data, error } = await this.supabase
+      // First, get the cake IDs this user is a member of
+      const { data: memberships, error: memberError } = await this.supabase
         .from('cake_members')
-        .select(`
-          cakes(*)
-        `)
+        .select('cake_id')
         .eq('user_id', userId)
-        .order('joined_at', { ascending: false })
 
-      if (error) throw error
+      if (memberError) throw memberError
 
-      const cakes = data?.map((item: CakeMemberWithCake) => item.cakes).filter(Boolean) as Cake[]
-      return { data: cakes, error: null }
+      if (!memberships || memberships.length === 0) {
+        return { data: [], error: null }
+      }
+
+      // Then get the actual cakes
+      const cakeIds = memberships.map((m: { cake_id: string }) => m.cake_id)
+      const { data: cakes, error: cakesError } = await this.supabase
+        .from('cakes')
+        .select('*')
+        .in('id', cakeIds)
+        .order('created_at', { ascending: false })
+
+      if (cakesError) throw cakesError
+
+      return { data: cakes as Cake[], error: null }
     } catch (error) {
       return { data: null, error: error as Error }
     }
