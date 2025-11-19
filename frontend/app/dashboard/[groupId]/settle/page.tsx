@@ -10,7 +10,6 @@ import { createClient } from '@/lib/supabase/client'
 import { CakesAPI } from '@/lib/api/cakes'
 import { UsersAPI } from '@/lib/api/users'
 import { useCurrentUser } from '@/hooks/use-current-user'
-import { ICON_OPTIONS } from '@/lib/constants'
 import type { Cake, User } from '@/types/database'
 
 type MemberWithBalance = User & {
@@ -29,7 +28,8 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [cake, setCake] = useState<Cake | null>(null)
-  const [members, setMembers] = useState<MemberWithBalance[]>([])
+  const [usersWhoNeedToPay, setUsersWhoNeedToPay] = useState<MemberWithBalance[]>([])
+  const [usersWhoCanClaim, setUsersWhoCanClaim] = useState<MemberWithBalance[]>([])
   const [youOwe, setYouOwe] = useState<SettlementObligation[]>([])
   const [youAreOwed, setYouAreOwed] = useState<SettlementObligation[]>([])
   const [totalOwed, setTotalOwed] = useState(0)
@@ -41,8 +41,8 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
         setLoading(true)
         setError(null)
 
-        const cakeId = parseInt(groupId)
-        if (isNaN(cakeId)) {
+        const cakeId = Number.parseInt(groupId, 10)
+        if (Number.isNaN(cakeId)) {
           setError('Invalid cake ID')
           return
         }
@@ -77,16 +77,29 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
           if (membersError) {
             setError(membersError.message)
             return
-          } else if (memberUsers) {
+          }
+          if (memberUsers) {
             // Calculate balances from current_balances array
+            // Balance convention: positive = user is owed (can claim), negative = user owes (needs to pay)
             const balances = cakeData.current_balances || []
             const membersWithBalances: MemberWithBalance[] = memberUsers.map((member, index) => ({
               ...member,
-              balance: parseFloat(balances[index] || '0')
+              balance: Number.parseFloat(balances[index] || '0')
             }))
-            setMembers(membersWithBalances)
 
-            // Calculate settlement obligations
+            // Separate members by settlement status
+            const needToPay = membersWithBalances
+              .filter(m => m.balance < 0)
+              .sort((a, b) => a.balance - b.balance) // Most negative first
+            
+            const canClaim = membersWithBalances
+              .filter(m => m.balance > 0)
+              .sort((a, b) => b.balance - a.balance) // Most positive first
+            
+            setUsersWhoNeedToPay(needToPay)
+            setUsersWhoCanClaim(canClaim)
+
+            // Calculate current user's specific obligations
             const currentUserBalance = membersWithBalances.find(m => m.id === currentUser.id)?.balance || 0
             
             // Users you owe (they have positive balance, you have negative)
@@ -101,6 +114,9 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
               
               setYouOwe(oweList)
               setTotalOwed(Math.abs(currentUserBalance))
+            } else {
+              setYouOwe([])
+              setTotalOwed(0)
             }
 
             // Users who owe you (you have positive balance, they have negative)
@@ -115,6 +131,9 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
               
               setYouAreOwed(owedList)
               setTotalOwedToYou(currentUserBalance)
+            } else {
+              setYouAreOwed([])
+              setTotalOwedToYou(0)
             }
           }
         }
@@ -205,6 +224,125 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
               <p className="text-[#4A5568]">Let&apos;s get those balances squared away</p>
             </div>
 
+            {/* Settlement Overview - All Members */}
+            {(usersWhoNeedToPay.length > 0 || usersWhoCanClaim.length > 0) && (
+              <Card className="p-8 pixel-card backdrop-blur border-4 mb-6 bg-white/80 border-[#FFB6D9]">
+                <h2 className="text-2xl font-bold pixel-text text-[#2D3748] mb-6 text-center">Settlement Overview</h2>
+                
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Users Who Need to Pay */}
+                  {usersWhoNeedToPay.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-bold pixel-text text-[#FF6B6B] mb-4 flex items-center gap-2">
+                        <span>💸</span>
+                        Need to Pay ({usersWhoNeedToPay.length})
+                      </h3>
+                      <div className="space-y-3">
+                        {usersWhoNeedToPay.map((member) => (
+                          <div
+                            key={member.id}
+                            className={`bg-[#FF6B6B]/10 border-3 border-[#FF6B6B] rounded p-4 ${
+                              member.id === currentUser?.id ? 'ring-4 ring-[#FF6B6B]' : ''
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-xl">
+                                  {member.avatar_url ? (
+                                    <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                                  ) : (
+                                    <span>{member.username.charAt(0).toUpperCase()}</span>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="font-bold pixel-text text-[#2D3748]">
+                                    {member.username}
+                                    {member.id === currentUser?.id && (
+                                      <span className="ml-2 text-sm text-[#FF6B6B]">(You)</span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-[#4A5568]">Balance</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-2xl font-bold pixel-text text-[#FF6B6B]">
+                                  ${Math.abs(member.balance).toFixed(2)}
+                                </div>
+                                <div className="text-xs text-[#4A5568]">to pay</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Users Who Can Claim */}
+                  {usersWhoCanClaim.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-bold pixel-text text-[#5DD39E] mb-4 flex items-center gap-2">
+                        <span>💰</span>
+                        Can Claim ({usersWhoCanClaim.length})
+                      </h3>
+                      <div className="space-y-3">
+                        {usersWhoCanClaim.map((member) => (
+                          <div
+                            key={member.id}
+                            className={`bg-[#5DD39E]/10 border-3 border-[#5DD39E] rounded p-4 ${
+                              member.id === currentUser?.id ? 'ring-4 ring-[#5DD39E]' : ''
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl">
+                                  {member.avatar_url ? (
+                                    <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                                  ) : (
+                                    <span>{member.username.charAt(0).toUpperCase()}</span>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="font-bold pixel-text text-[#2D3748]">
+                                    {member.username}
+                                    {member.id === currentUser?.id && (
+                                      <span className="ml-2 text-sm text-[#5DD39E]">(You)</span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-[#4A5568]">Balance</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-2xl font-bold pixel-text text-[#5DD39E]">
+                                  ${member.balance.toFixed(2)}
+                                </div>
+                                <div className="text-xs text-[#4A5568]">to claim</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Summary Totals */}
+                <div className="mt-6 pt-6 border-t-3 border-[#E9D5FF]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-bold pixel-text text-[#2D3748]">Total Owed</span>
+                    <span className="text-2xl font-bold pixel-text text-[#FF6B6B]">
+                      ${usersWhoNeedToPay.reduce((sum, m) => sum + Math.abs(m.balance), 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-lg font-bold pixel-text text-[#2D3748]">Total to Claim</span>
+                    <span className="text-2xl font-bold pixel-text text-[#5DD39E]">
+                      ${usersWhoCanClaim.reduce((sum, m) => sum + m.balance, 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </Card>
+            )}
+
             {/* You Owe Section */}
             {youOwe.length > 0 && (
               <Card className={`p-8 pixel-card backdrop-blur border-4 mb-6 ${
@@ -212,7 +350,7 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
               }`}>
                 <h2 className="text-xl font-bold pixel-text text-[#2D3748] mb-6">You Need to Pay</h2>
                 
-                {youOwe.map((obligation, index) => (
+                {youOwe.map((obligation) => (
                   <div key={obligation.user.id} className="mb-6">
                     <div className="flex items-center justify-between gap-4 mb-3">
                       <div className="flex items-center gap-3">
@@ -228,15 +366,15 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
 
                       <div className="flex-1 flex items-center justify-center gap-3">
                         <div className="flex gap-1">
-                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0s' }}></div>
-                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0s' }} />
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.2s' }} />
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.4s' }} />
                         </div>
                         <ArrowRight className="w-6 h-6 text-[#FF6B6B]" />
                         <div className="flex gap-1">
-                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0s' }}></div>
-                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0s' }} />
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.2s' }} />
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.4s' }} />
                         </div>
                       </div>
 
@@ -283,7 +421,7 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
               }`}>
                 <h2 className="text-xl font-bold pixel-text text-[#2D3748] mb-6">You Can Claim</h2>
                 
-                {youAreOwed.map((obligation, index) => (
+                {youAreOwed.map((obligation) => (
                   <div key={obligation.user.id} className="mb-6">
                     <div className="flex items-center justify-between gap-4 mb-3">
                       <div className="flex items-center gap-3">
@@ -299,15 +437,15 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
 
                       <div className="flex-1 flex items-center justify-center gap-3">
                         <div className="flex gap-1">
-                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0s' }}></div>
-                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0s' }} />
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.2s' }} />
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.4s' }} />
                         </div>
                         <ArrowRight className="w-6 h-6 text-[#5DD39E]" />
                         <div className="flex gap-1">
-                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0s' }}></div>
-                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0s' }} />
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.2s' }} />
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.4s' }} />
                         </div>
                       </div>
 
@@ -348,17 +486,17 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
             )}
 
             {/* All Settled */}
-            {youOwe.length === 0 && youAreOwed.length === 0 && (
+            {usersWhoNeedToPay.length === 0 && usersWhoCanClaim.length === 0 && (
               <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-4 border-[#5DD39E] mb-6">
                 <div className="text-center">
                   <div className="text-6xl mb-4">✅</div>
                   <h2 className="text-2xl font-bold pixel-text text-[#2D3748] mb-2">All Settled!</h2>
-                  <p className="text-[#4A5568]">Your balance is $0.00. No settlements needed.</p>
+                  <p className="text-[#4A5568]">All balances are $0.00. No settlements needed.</p>
                 </div>
               </Card>
             )}
 
-            {(youOwe.length > 0 || youAreOwed.length > 0) && (
+            {currentUser && (youOwe.length > 0 || youAreOwed.length > 0) && (
               <Button 
                 onClick={handleConfirmSettlement}
                 className="w-full bg-[#FF69B4] hover:bg-[#FF1493] pixel-button shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 py-8 text-2xl"
@@ -376,7 +514,7 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
             <div className="relative mb-8">
               <div className="text-8xl animate-spin" style={{ animationDuration: '2s' }}>🍰</div>
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-32 h-32 border-8 border-[#FFB6D9] border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-32 h-32 border-8 border-[#FFB6D9] border-t-transparent rounded-full animate-spin" />
               </div>
             </div>
 
@@ -387,7 +525,7 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
 
             {/* Pixel Progress Bar */}
             <div className="w-full max-w-md mt-8 bg-white border-4 border-[#FFB6D9] rounded h-8 overflow-hidden pixel-art-shadow">
-              <div className="h-full bg-gradient-to-r from-[#FF69B4] to-[#FFB6D9] animate-pulse" style={{ width: '70%' }}></div>
+              <div className="h-full bg-gradient-to-r from-[#FF69B4] to-[#FFB6D9] animate-pulse" style={{ width: '70%' }} />
             </div>
           </div>
         )}
