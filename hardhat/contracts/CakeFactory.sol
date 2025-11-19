@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+
+// Uniswap v4 
+import { UniversalRouter } from "@uniswap/universal-router/contracts/UniversalRouter.sol";
+import { Commands } from "@uniswap/universal-router/contracts/libraries/Commands.sol";
+import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import { IV4Router } from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
+import { Actions } from "@uniswap/v4-periphery/src/libraries/Actions.sol";
+import { IPermit2 } from "@uniswap/permit2/src/interfaces/IPermit2.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+
+
 /**
  * @title CakeFactory
  * @notice Manages groups of people (cakes) and their shared cake ingredients
@@ -8,6 +20,13 @@ pragma solidity ^0.8.24;
  * @dev Each cake represents a group that can split bills and manage cake ingredients
  */
 contract CakeFactory {
+
+    // Assets for using Uniswap v4
+    using StateLibrary for IPoolManager;
+    UniversalRouter public immutable router;
+    IPoolManager public immutable poolManager;
+    IPermit2 public immutable permit2;
+
     // Struct to represent a group (cake)
     struct Cake {
         uint64 createdAt; // Timestamp of cake creation (64-bit, valid until 2106)
@@ -88,7 +107,12 @@ contract CakeFactory {
      * @notice Initializes the contract
      * @dev This function can only be called once during deployment
      */
-    constructor() {
+    constructor(address _router, address _poolManager, address _permit2) {
+        // Uniswap v4
+        router = UniversalRouter(payable(_router));
+        poolManager = IPoolManager(_poolManager);
+        permit2 = IPermit2(_permit2);
+        // Initialize total counters
         totalCakes = 0;
         totalBatchedCakeIngredients = 0;
         totalUsers = 0;
@@ -558,5 +582,75 @@ contract CakeFactory {
             revert InvalidMembers();
         }
         return (cake.memberIds, cake.memberWeights);
+    }
+    /**
+     * UNISWAP V4 LOGIC
+     */
+
+    /**
+     * @notice Approves the router to spend the token with Permit2
+     * @param token The token to approve
+     * @param amount The amount to approve
+     * @param expiration The expiration time
+     */
+    function _approveTokenWithPermit2(
+	    address token,
+	    uint160 amount,
+	    uint48 expiration
+    ) internal {
+        IERC20(token).approve(address(permit2), type(uint256).max);
+        permit2.approve(token, address(router), amount, expiration);
+    }
+
+    /**
+     * @notice Executes a swap that returns exact output amount
+     * @param key The pool key
+     * @param zeroForOne The direction of the swap
+     * @param amountIn The amount to swap
+     * @param maxAmountIn The maximum amount to swap
+     * @dev Using single-hop. TODO: Implement multi-hop swaps.
+     */
+    function _swapExactOutputSingle(
+        PoolKey calldata key,
+        bool zeroForOne,
+        uint128 amountOut,
+        uint128 maxAmountIn
+    ) internal {
+        // Encode the Universal Router command
+        bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
+        bytes[] memory inputs = new bytes[](1);
+    
+        // Encode V4Router actions
+        bytes memory actions = abi.encodePacked(
+            uint8(Actions.SWAP_EXACT_OUT_SINGLE),
+            uint8(Actions.SETTLE_ALL),
+            uint8(Actions.TAKE_ALL)
+        );
+    
+        // Prepare parameters for each action
+        bytes[] memory params = new bytes[](3);
+        params[0] = abi.encode(
+            IV4Router.ExactInputSingleParams({
+                poolKey: key,
+                zeroForOne: zeroForOne,
+                amountOut: amountOut,
+                amountInMaximum: maxAmountIn,
+                hookData: bytes("")
+            })
+        );
+        if (zeroForOne) {
+            params[1] = abi.encode(key.currency0, maxAmountIn);
+            params[2] = abi.encode(key.currency1, amountOut);
+        } else {
+            params[1] = abi.encode(key.currency1, maxAmountIn);
+            params[2] = abi.encode(key.currency0, amountOut);
+        }
+    
+        // Combine actions and params into inputs
+        inputs[0] = abi.encode(actions, params);
+    
+        // Execute the swap
+        uint256 deadline = block.timestamp + 60;
+        router.execute(commands, inputs, deadline);
     }
 }
