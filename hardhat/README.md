@@ -4,7 +4,7 @@ This is a Hardhat project for deploying Solidity smart contracts using Hardhat I
 
 ## Quick Start
 
-1. Install dependencies:
+1. Install dependencies (run inside `hardhat/`):
 ```bash
 npm install
 ```
@@ -14,20 +14,27 @@ npm install
 npm run compile
 ```
 
-3. Run tests:
+3. Run the full test suite:
 ```bash
 npm run test
 ```
 
-4. Deploy contracts:
+4. Deploy contracts to your local node (Ignition – see below):
 ```bash
 npm run deploy:local
 ```
 
-5. Start local Hardhat node:
+5. Start a standalone Hardhat node:
 ```bash
 npm run node
 ```
+
+### Helper scripts
+
+- `scripts/startNode.sh`: wipes previous Ignition artifacts, recompiles, and boots a node if one isn’t already running.
+- `scripts/verifyRegister.sh`: deploys via Ignition on `localhost` and immediately runs `scripts/interact.js` for a sanity check (registers users).
+
+> These scripts are handy when running demos—start the node with `startNode.sh`, then in another terminal execute `verifyRegister.sh` to populate the chain with sample data.
 
 ## Project Structure
 
@@ -59,7 +66,19 @@ hardhat ignition verify --network <network-name>
 
 The project is configured to use Solidity 0.8.24 with optimizer enabled. Network configurations can be added in `hardhat.config.js`. Ignition-specific settings are also configured in the config file.
 
-## TODOs
+## Core workflows covered by this repo
 
-- Implement on-chain contract
+- **User registration & cake creation** (`registerUser`, `createCake`)
+- **Expense batching** (`addBatchedCakeIngredients`) with optional weight overrides and multiple payers
+- **Settlement** (`cutCake`) including overdue-interest accrual and balance updates
+- **Read helpers** (`getCakeDetails`, `getCakeMembers`, `getCakeMemberBalance`, etc.) for the frontend and scripts
+
+## Testing
+
+- Run everything: `npm run test`
+- Target a single spec while iterating:
+
+	```bash
+	npx hardhat test test/addBatchedCakeIngredients.test.js
+	```
 
