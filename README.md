@@ -210,7 +210,7 @@ The off-chain database stores extended metadata that complements on-chain data. 
 
 ### Contract: CakeFactory.sol
 
-The `CakeFactory` contract manages cakes and cake ingredients on-chain.
+The `CakeFactory` contract manages cake groups, assigns deterministic user IDs, batches expenses, accrues interest, and cuts cakes on-chain. It is the single source of truth for the core financial mechanics that the frontend and backend mirror.
 
 #### Data Structures
 
@@ -220,45 +220,49 @@ struct Cake {
     uint64 createdAt;                   // Timestamp of cake creation (64-bit, valid until 2106)
     uint64 lastCutAt;                   // Timestamp of last cake cut (64-bit, valid until 2106)
     uint64 lastCutBatchedIngredientsId; // ID of last ingredients included in a cut
-    uint16 interestRate;                // Interest rate for unpaid amounts in this cake
-    bool active;                        // Whether the cake is active, half or more of members can disable the cake
+    uint128 latestIngredientId;         // Counter for the last submitted ingredient
+    uint64 billingPeriod;               // Expected cadence between cuts
+    uint64 nextDueAt;                   // Deadline for the next billing period
+    uint16 interestRate;                // Interest rate for unpaid amounts (in basis points)
+    bool active;                        // Whether the cake is active (voting can disable it)
     address token;                      // Token contract address (0x0 for native ETH)
-    bool[] votesToDisable;              // Current Votes to disable the cake
+    bool[] votesToDisable;              // Votes collected to disable the cake
     uint64[] memberIds;                 // Array of user IDs in the cake
-    uint256[] currentBalances;          // Current ammounts to be paid by each member
+    uint16[] memberWeights;             // Weight per member (same order as memberIds, sum = 10,000)
+    int256[] currentBalances;           // Running balances per member
 }
 ```
 
 **BatchedCakeIngredients Struct**
 ```solidity
 struct BatchedCakeIngredients {
-    uint64 createdAt;              // Timestamp of batched ingredients creation (64-bit, valid until 2106)
-    uint8[] weights;               // Payment weights per member (same order as Cake.memberIds)
-    uint64[] payerIds;             // User IDs of payers
-    uint256[] payedAmounts;        // Amounts paid by each payer
+    uint64 createdAt;      // Timestamp of batched ingredients creation (64-bit, valid until 2106)
+    uint16[] weights;      // Payment weights per member (same order as Cake.memberIds)
+    uint64[] payerIds;     // User IDs of payers
+    uint256[] payedAmounts; // Amounts paid by each payer
 }
 ```
 
 #### Storage Mappings
 
 ```solidity
-mapping(address => uint64) public userIds;                    // Address to user ID mapping
-mapping(uint64 => address) public userAddresses;              // User ID to address mapping
-mapping(uint128 => Cake) public cakes;                        // Cake ID to Cake struct
-mapping(uint128 => mapping(uint64 => BatchedCakeIngredients)) public batchedIngredientsPerCake;  // Nested mapping: cake ID -> batched ingredient ID (uint64) -> batched ingredients
-mapping(uint64 => mapping(uint128 => bool)) public userCakes; // User ID to cake participation mapping (indicates if user has debts to the cake)
-uint256 public totalCakes;                                    // Total number of cakes created
-uint256 public totalBatchedCakeIngredients;                   // Total number of batched cake ingredients created
+mapping(address => uint64) public userIds;                                   // Address ➜ user ID
+mapping(uint64 => address) public userAddresses;                             // User ID ➜ address
+mapping(uint128 => Cake) public cakes;                                       // Cake ID ➜ Cake data
+mapping(uint128 => mapping(uint64 => BatchedCakeIngredients)) public batchedIngredientsPerCake; // cake ➜ ingredient ID ➜ ingredient
+mapping(uint64 => mapping(uint128 => bool)) public userCakes;                // user ➜ cake participation flag
+mapping(uint64 => uint128[]) private userCakeIds;                            // cakes per user (viewed via getter)
+mapping(uint128 => mapping(uint64 => uint64)) public cakeMemberIndex;        // cake ➜ member ID ➜ index
+
+uint64 public totalUsers;                         // Count of registered users
+uint128 public totalCakes;                        // Count of cakes created
+uint128 public totalBatchedCakeIngredients;       // Count of batched ingredient records
 ```
 
 #### Events
-
 ```solidity
 event CakeCreated(uint128 indexed cakeId);
-event BatchedCakeIngredientsAdded(
-    uint128 indexed batchedCakeIngredientsId,
-    uint128 indexed cakeId
-);
+event BatchedCakeIngredientsAdded(uint128 indexed batchedCakeIngredientsId, uint128 indexed cakeId);
 event CakeCutted(uint128 indexed cakeId);
 ```
 
