@@ -2,24 +2,145 @@
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { createClient } from '@/lib/supabase/client'
+import { CakesAPI } from '@/lib/api/cakes'
+import { UsersAPI } from '@/lib/api/users'
+import { useCurrentUser } from '@/hooks/use-current-user'
+import { ICON_OPTIONS } from '@/lib/constants'
+import type { Cake, User } from '@/types/database'
+
+type MemberWithBalance = User & {
+  balance: number
+}
+
+type SettlementObligation = {
+  user: User
+  amount: number
+}
 
 export default function SettleUpPage({ params }: { params: { groupId: string } }) {
   const { groupId } = params
+  const { user: currentUser } = useCurrentUser()
   const [status, setStatus] = useState<'summary' | 'processing' | 'success'>('summary')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [cake, setCake] = useState<Cake | null>(null)
+  const [members, setMembers] = useState<MemberWithBalance[]>([])
+  const [youOwe, setYouOwe] = useState<SettlementObligation[]>([])
+  const [youAreOwed, setYouAreOwed] = useState<SettlementObligation[]>([])
+  const [totalOwed, setTotalOwed] = useState(0)
+  const [totalOwedToYou, setTotalOwedToYou] = useState(0)
 
-  // Mock settlement data
-  const settlement = {
-    youOwe: [
-      { name: 'Alice', avatar: '👩', amount: 45.00 }
-    ],
-    totalAmount: 45.00
-  }
+  useEffect(() => {
+    async function fetchSettlementData() {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const cakeId = parseInt(groupId)
+        if (isNaN(cakeId)) {
+          setError('Invalid cake ID')
+          return
+        }
+
+        if (!currentUser) {
+          setError('Please connect your wallet and register')
+          return
+        }
+
+        const supabase = createClient()
+        const cakesAPI = new CakesAPI(supabase)
+        const usersAPI = new UsersAPI(supabase)
+
+        // Fetch cake
+        const { data: cakeData, error: cakeError } = await cakesAPI.getCake(cakeId)
+        if (cakeError || !cakeData) {
+          setError(cakeError?.message || 'Cake not found')
+          return
+        }
+        setCake(cakeData)
+
+        // Check if user is a member
+        const userIsMember = cakeData.member_ids?.includes(currentUser.id) ?? false
+        if (!userIsMember) {
+          setError('You are not a member of this cake')
+          return
+        }
+
+        // Fetch members
+        if (cakeData.member_ids && cakeData.member_ids.length > 0) {
+          const { data: memberUsers, error: membersError } = await usersAPI.validateUserIds(cakeData.member_ids)
+          if (membersError) {
+            setError(membersError.message)
+            return
+          } else if (memberUsers) {
+            // Calculate balances from current_balances array
+            const balances = cakeData.current_balances || []
+            const membersWithBalances: MemberWithBalance[] = memberUsers.map((member, index) => ({
+              ...member,
+              balance: parseFloat(balances[index] || '0')
+            }))
+            setMembers(membersWithBalances)
+
+            // Calculate settlement obligations
+            const currentUserBalance = membersWithBalances.find(m => m.id === currentUser.id)?.balance || 0
+            
+            // Users you owe (they have positive balance, you have negative)
+            if (currentUserBalance < 0) {
+              const oweList: SettlementObligation[] = membersWithBalances
+                .filter(m => m.id !== currentUser.id && m.balance > 0)
+                .map(m => ({
+                  user: m,
+                  amount: Math.min(Math.abs(currentUserBalance), m.balance)
+                }))
+                .sort((a, b) => b.amount - a.amount)
+              
+              setYouOwe(oweList)
+              setTotalOwed(Math.abs(currentUserBalance))
+            }
+
+            // Users who owe you (you have positive balance, they have negative)
+            if (currentUserBalance > 0) {
+              const owedList: SettlementObligation[] = membersWithBalances
+                .filter(m => m.id !== currentUser.id && m.balance < 0)
+                .map(m => ({
+                  user: m,
+                  amount: Math.min(currentUserBalance, Math.abs(m.balance))
+                }))
+                .sort((a, b) => b.amount - a.amount)
+              
+              setYouAreOwed(owedList)
+              setTotalOwedToYou(currentUserBalance)
+            }
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load settlement data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchSettlementData()
+  }, [groupId, currentUser])
 
   const handleConfirmSettlement = () => {
+    if (youOwe.length === 0 && youAreOwed.length === 0) {
+      return
+    }
+    
     setStatus('processing')
+    
+    // TODO: Implement actual blockchain settlement
+    // This should:
+    // 1. If youOwe.length > 0: Call payCakeSlice on the smart contract
+    // 2. If youAreOwed.length > 0: Call claimCakeSlice on the smart contract
+    // 3. Wait for transaction confirmation
+    // 4. Update balances in database
     
     // Simulate transaction processing
     setTimeout(() => {
@@ -41,20 +162,35 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
             </Link>
             
             <div className="flex items-center gap-4">
-              <Button variant="outline" className="pixel-button border-2 border-[#B4E7CE]">
-                Connect Wallet
-              </Button>
-              <div className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl cursor-pointer hover:scale-110 transition-transform">
-                👤
-              </div>
+              <ConnectButton />
             </div>
           </div>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-8 max-w-2xl">
-        {/* Summary Screen */}
-        {status === 'summary' && (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center min-h-[60vh]">
+            <Loader2 className="w-12 h-12 text-[#FF69B4] animate-spin mb-4" />
+            <p className="text-[#4A5568]">Loading settlement data...</p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center min-h-[60vh]">
+            <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-4 border-[#FF6B6B] max-w-md">
+              <div className="text-center">
+                <div className="text-4xl mb-4">😞</div>
+                <div className="text-xl font-bold pixel-text text-[#2D3748] mb-2">Error</div>
+                <div className="text-sm text-[#4A5568] mb-4">{error}</div>
+                <Link href={`/dashboard/${groupId}`}>
+                  <Button className="bg-[#FF69B4] hover:bg-[#FF1493] pixel-button">
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Back to Group
+                  </Button>
+                </Link>
+              </div>
+            </Card>
+          </div>
+        ) : status === 'summary' && (
           <>
             <Link href={`/dashboard/${groupId}`}>
               <Button variant="ghost" className="mb-6 pixel-button hover:bg-[#FFB6D9]/20">
@@ -69,71 +205,168 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
               <p className="text-[#4A5568]">Let&apos;s get those balances squared away</p>
             </div>
 
-            <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-4 border-[#FFB6D9] mb-6">
-              <h2 className="text-xl font-bold pixel-text text-[#2D3748] mb-6">Settlement Breakdown</h2>
-              
-              {settlement.youOwe.map((person, index) => (
-                <div key={index} className="mb-6">
-                  <div className="flex items-center justify-between gap-4 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-16 h-16 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-3xl">
-                        👤
+            {/* You Owe Section */}
+            {youOwe.length > 0 && (
+              <Card className={`p-8 pixel-card backdrop-blur border-4 mb-6 ${
+                'bg-[#FF6B6B]/10 border-[#FF6B6B]'
+              }`}>
+                <h2 className="text-xl font-bold pixel-text text-[#2D3748] mb-6">You Need to Pay</h2>
+                
+                {youOwe.map((obligation, index) => (
+                  <div key={obligation.user.id} className="mb-6">
+                    <div className="flex items-center justify-between gap-4 mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl">
+                          {currentUser?.avatar_url ? (
+                            <img src={currentUser.avatar_url} alt={currentUser.username} className="w-full h-full rounded" />
+                          ) : (
+                            <span>{currentUser?.username.charAt(0).toUpperCase() || '👤'}</span>
+                          )}
+                        </div>
+                        <span className="text-lg font-bold pixel-text">You</span>
                       </div>
-                      <span className="text-lg font-bold pixel-text">You</span>
+
+                      <div className="flex-1 flex items-center justify-center gap-3">
+                        <div className="flex gap-1">
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0s' }}></div>
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                        </div>
+                        <ArrowRight className="w-6 h-6 text-[#FF6B6B]" />
+                        <div className="flex gap-1">
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0s' }}></div>
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                          <div className="w-3 h-3 bg-[#FF6B6B] animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl">
+                          {obligation.user.avatar_url ? (
+                            <img src={obligation.user.avatar_url} alt={obligation.user.username} className="w-full h-full rounded" />
+                          ) : (
+                            <span>{obligation.user.username.charAt(0).toUpperCase()}</span>
+                          )}
+                        </div>
+                        <span className="text-lg font-bold pixel-text">{obligation.user.username}</span>
+                      </div>
                     </div>
 
-                    <div className="flex-1 flex items-center justify-center gap-3">
-                      <div className="flex gap-1">
-                        <div className="w-3 h-3 bg-[#FF69B4] animate-pulse" style={{ animationDelay: '0s' }}></div>
-                        <div className="w-3 h-3 bg-[#FF69B4] animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                        <div className="w-3 h-3 bg-[#FF69B4] animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                    <div className="bg-[#FF6B6B]/10 border-3 border-[#FF6B6B] rounded p-4 text-center">
+                      <div className="text-sm text-[#4A5568] mb-1">You owe {obligation.user.username}</div>
+                      <div className="text-3xl font-bold pixel-text text-[#FF6B6B] mb-2">
+                        ${obligation.amount.toFixed(2)}
                       </div>
-                      <ArrowRight className="w-6 h-6 text-[#FF69B4]" />
-                      <div className="flex gap-1">
-                        <div className="w-3 h-3 bg-[#FF69B4] animate-pulse" style={{ animationDelay: '0s' }}></div>
-                        <div className="w-3 h-3 bg-[#FF69B4] animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                        <div className="w-3 h-3 bg-[#FF69B4] animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                      <div className="flex items-center justify-center gap-2 text-sm text-[#4A5568]">
+                        <div className="w-5 h-5 bg-[#B4E7CE] pixel-art-shadow flex items-center justify-center text-xs">💰</div>
+                        <span>Paid in {cake?.token === '0x0000000000000000000000000000000000000000' ? 'native ETH' : 'token'}</span>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="w-16 h-16 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-3xl">
-                        {person.avatar}
-                      </div>
-                      <span className="text-lg font-bold pixel-text">{person.name}</span>
                     </div>
                   </div>
+                ))}
 
-                  <div className="bg-[#FFB6D9]/10 border-3 border-[#FFB6D9] rounded p-4 text-center">
-                    <div className="text-sm text-[#4A5568] mb-1">You owe {person.name}</div>
-                    <div className="text-3xl font-bold pixel-text text-[#FF69B4] mb-2">
-                      ${person.amount.toFixed(2)}
-                    </div>
-                    <div className="flex items-center justify-center gap-2 text-sm text-[#4A5568]">
-                      <div className="w-5 h-5 bg-[#B4E7CE] pixel-art-shadow flex items-center justify-center text-xs">💰</div>
-                      <span>Paid in stablecoins (USDC)</span>
-                    </div>
+                <div className="pt-6 border-t-3 border-[#E9D5FF] mt-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-bold pixel-text text-[#2D3748]">Total to Pay</span>
+                    <span className="text-3xl font-bold pixel-text text-[#FF6B6B]">
+                      ${totalOwed.toFixed(2)}
+                    </span>
                   </div>
                 </div>
-              ))}
+              </Card>
+            )}
 
-              <div className="pt-6 border-t-3 border-[#E9D5FF] mt-6">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold pixel-text text-[#2D3748]">Total to Settle</span>
-                  <span className="text-3xl font-bold pixel-text text-[#FF69B4]">
-                    ${settlement.totalAmount.toFixed(2)}
-                  </span>
+            {/* You Are Owed Section */}
+            {youAreOwed.length > 0 && (
+              <Card className={`p-8 pixel-card backdrop-blur border-4 mb-6 ${
+                'bg-[#5DD39E]/10 border-[#5DD39E]'
+              }`}>
+                <h2 className="text-xl font-bold pixel-text text-[#2D3748] mb-6">You Can Claim</h2>
+                
+                {youAreOwed.map((obligation, index) => (
+                  <div key={obligation.user.id} className="mb-6">
+                    <div className="flex items-center justify-between gap-4 mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl">
+                          {obligation.user.avatar_url ? (
+                            <img src={obligation.user.avatar_url} alt={obligation.user.username} className="w-full h-full rounded" />
+                          ) : (
+                            <span>{obligation.user.username.charAt(0).toUpperCase()}</span>
+                          )}
+                        </div>
+                        <span className="text-lg font-bold pixel-text">{obligation.user.username}</span>
+                      </div>
+
+                      <div className="flex-1 flex items-center justify-center gap-3">
+                        <div className="flex gap-1">
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0s' }}></div>
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                        </div>
+                        <ArrowRight className="w-6 h-6 text-[#5DD39E]" />
+                        <div className="flex gap-1">
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0s' }}></div>
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                          <div className="w-3 h-3 bg-[#5DD39E] animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl">
+                          {currentUser?.avatar_url ? (
+                            <img src={currentUser.avatar_url} alt={currentUser.username} className="w-full h-full rounded" />
+                          ) : (
+                            <span>{currentUser?.username.charAt(0).toUpperCase() || '👤'}</span>
+                          )}
+                        </div>
+                        <span className="text-lg font-bold pixel-text">You</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#5DD39E]/10 border-3 border-[#5DD39E] rounded p-4 text-center">
+                      <div className="text-sm text-[#4A5568] mb-1">{obligation.user.username} owes you</div>
+                      <div className="text-3xl font-bold pixel-text text-[#5DD39E] mb-2">
+                        ${obligation.amount.toFixed(2)}
+                      </div>
+                      <div className="flex items-center justify-center gap-2 text-sm text-[#4A5568]">
+                        <div className="w-5 h-5 bg-[#B4E7CE] pixel-art-shadow flex items-center justify-center text-xs">💰</div>
+                        <span>Claim in {cake?.token === '0x0000000000000000000000000000000000000000' ? 'native ETH' : 'token'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="pt-6 border-t-3 border-[#E9D5FF] mt-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-bold pixel-text text-[#2D3748]">Total to Claim</span>
+                    <span className="text-3xl font-bold pixel-text text-[#5DD39E]">
+                      ${totalOwedToYou.toFixed(2)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            )}
 
-            <Button 
-              onClick={handleConfirmSettlement}
-              className="w-full bg-[#FF69B4] hover:bg-[#FF1493] pixel-button shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 py-8 text-2xl"
-            >
-              <div className="mr-3 text-3xl">🎂</div>
-              Confirm Settlement
-            </Button>
+            {/* All Settled */}
+            {youOwe.length === 0 && youAreOwed.length === 0 && (
+              <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-4 border-[#5DD39E] mb-6">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">✅</div>
+                  <h2 className="text-2xl font-bold pixel-text text-[#2D3748] mb-2">All Settled!</h2>
+                  <p className="text-[#4A5568]">Your balance is $0.00. No settlements needed.</p>
+                </div>
+              </Card>
+            )}
+
+            {(youOwe.length > 0 || youAreOwed.length > 0) && (
+              <Button 
+                onClick={handleConfirmSettlement}
+                className="w-full bg-[#FF69B4] hover:bg-[#FF1493] pixel-button shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 py-8 text-2xl"
+              >
+                <div className="mr-3 text-3xl">🎂</div>
+                {youOwe.length > 0 ? 'Pay & Settle' : 'Claim Funds'}
+              </Button>
+            )}
           </>
         )}
 
@@ -176,11 +409,16 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
             <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-4 border-[#5DD39E] mb-8 w-full max-w-md">
               <div className="text-center">
                 <div className="text-6xl mb-4">🏆</div>
-                <p className="text-[#4A5568] mb-2">You paid</p>
+                <p className="text-[#4A5568] mb-2">You {youOwe.length > 0 ? 'paid' : 'claimed'}</p>
                 <p className="text-3xl font-bold pixel-text text-[#2D3748] mb-2">
-                  ${settlement.totalAmount.toFixed(2)}
+                  ${(youOwe.length > 0 ? totalOwed : totalOwedToYou).toFixed(2)}
                 </p>
-                <p className="text-[#4A5568]">to Alice</p>
+                {youOwe.length > 0 && youOwe.length === 1 && (
+                  <p className="text-[#4A5568]">to {youOwe[0].user.username}</p>
+                )}
+                {youAreOwed.length > 0 && youAreOwed.length === 1 && (
+                  <p className="text-[#4A5568]">from {youAreOwed[0].user.username}</p>
+                )}
               </div>
 
               <div className="mt-6 pt-6 border-t-3 border-[#E9D5FF]">
