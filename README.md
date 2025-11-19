@@ -14,6 +14,52 @@ Rather Cake Pay enables users to:
 - Manage groups in a single token
   - Provide integration with swap protocols to allow payments in any token
 
+## Deployment
+
+### Prerequisites
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Set up environment variables:
+   - Create a `.env` file in the `hardhat/` directory based on `.env.example`.
+   - Example:
+     ```env
+     SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID
+     SEPOLIA_PRIVATE_KEY=YOUR_PRIVATE_KEY
+     BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+     BASE_SEPOLIA_PRIVATE_KEY=YOUR_PRIVATE_KEY
+     ETHERSCAN_API_KEY=YOUR_ETHERSCAN_API_KEY
+     BASESCAN_API_KEY=YOUR_BASESCAN_API_KEY
+     ```
+
+### Deployment Steps
+
+1. Start a local Hardhat node:
+   ```bash
+   npm run node
+   ```
+
+2. Deploy contracts:
+   - **Localhost**:
+     ```bash
+     npm run deploy:localhost
+     ```
+   - **Sepolia**:
+     ```bash
+     npm run deploy:sepolia
+     ```
+   - **Base Sepolia**:
+     ```bash
+     npm run deploy:base-sepolia
+     ```
+
+3. Verify deployment:
+   - Check the `frontend/public/contract/` directory for the ABI and deployment metadata.
+   - Ensure the `.env.example` file in the frontend is updated with the deployed contract address.
+
 ## Architecture
 
 Rather Cake Pay follows a decentralized architecture with three main layers:
@@ -43,78 +89,7 @@ Rather Cake Pay follows a decentralized architecture with three main layers:
     - Batching expenses
 
 
-### API routes
-
-#### Cakes (Groups)
-
-- `GET /api/cakes` - List all cakes for the authenticated user
-  - Query params: `?address=<userAddress>` (optional, defaults to authenticated user)
-  - Returns: Array of cake metadata with on-chain data
-
-- `GET /api/cakes/[cakeId]` - Get detailed cake information
-  - Returns: Cake metadata (description, imageUrl, category) merged with on-chain data (balances, members, token)
-
-- `POST /api/cakes` - Create cake metadata entry
-  - Body: `{ cakeId: string, description?: string, imageUrl?: string, category?: string }`
-  - Note: Called after on-chain cake creation to store extended metadata
-
-- `PUT /api/cakes/[cakeId]` - Update cake metadata, syncs with on-chain data for the cake
-  - Body: `{ description?: string, imageUrl?: string, category?: string }`
-
-#### Cake Ingredients (Expenses)
-
-- `GET /api/cakes/[cakeId]/ingredients` - List all ingredients for a cake
-  - Returns: Array of ingredients with metadata and on-chain status
-
-- `GET /api/ingredients/[cakeId]/[ingredientId]` - Get detailed ingredient information
-  - Returns: Ingredient metadata (name, description, receiptUrl) merged with on-chain data (weights, payers, amounts)
-
-- `POST /api/ingredients/[cakeId]` - Create ingredient (stored off-chain, pending submission)
-  - Body: `{ cakeId: string, name: string, description?: string, weights: number[], payerAddress: string, amount: string, receiptUrl?: string }`
-  - Returns: Created ingredient with pending status
-
-- `GET /api/ingredients/[cakeId]/batch` - Batch all non-submited cake ingredients for a specific cake
-  - Returns: Consolidated ingredient information to submit on-chain
-
-- `PUT /api/ingredients/[cakeId]/[ingredientId]` - Update ingredient metadata and non-submited on-chain data
-  - Body: `{ name?: string, description?: string, receiptUrl?: string }`
-  - Note: For already batched and submited ingredients only updates off-chain metadata, cannot modify submitted ingredients
-
-#### Users
-
-- `GET /api/users/[address]` - Get user metadata
-  - Returns: User profile (displayName, email, avatar, createdAt)
-
-- `POST /api/users` - Create or update user metadata
-  - Body: `{ address: string, displayName?: string, email?: string, avatar?: string }`
-  - Returns: Created/updated user profile
-
-- `PUT /api/users/[address]` - Update user metadata
-  - Body: `{ displayName?: string, email?: string, avatar?: string }`
-
-#### Blockchain Operations
-
-- `POST /api/blockchain/sync` - Sync blockchain events to database
-  - Body: `{ fromBlock?: number, toBlock?: number, cakeId?: string }`
-  - Returns: Sync status and number of events processed
-  - Note: Typically called by cron job or webhook
-
-#### Receipts
-
-- `POST /api/receipts/upload` - Upload receipt image
-  - Body: `FormData` with file
-  - Returns: `{ receiptUrl: string }` (URL to stored receipt)
-
-- `GET /api/receipts/[receiptId]` - Get receipt image
-  - Returns: Receipt image file
-
-#### Health & Status
-
-- `GET /api/health` - Health check endpoint
-  - Returns: `{ status: "ok", timestamp: number }`
-
- 
-### Key Components
+## Key Components
 
 - **Cake (Group)**: Represents a bill-splitting group with members, token configuration, current balances, and voting system for disabling
 - **Batched Cake Ingredients (Expenses)**: Batched expenses within a cake with weighted payment distribution and payer tracking
@@ -124,16 +99,7 @@ Rather Cake Pay follows a decentralized architecture with three main layers:
 - **Interest System**: Configurable interest rates per cake for unpaid amounts to incentivize timely settlements
 - **Voting System**: Members can vote to disable a cake (requires majority vote)
 
-### Data Flow
-
-1. User creates a cake via frontend → Transaction sent to CakeFactory contract → sync DB
-2. Contract emits events → Frontend listens, updates local state and sync DB
-3. Expenses batched on the backend with metadata synced to database
-4. User demands unsubmitted expenses to be added to the cake
-5. User demands a cake to be cut → User balances are updated acording to cumulative cake ingredients since last cut
-6. Payments processed → Users submit payments to the conctact which handles redirections
-
-### Technology Stack
+## Technology Stack
 
 - **Blockchain**: Solidity 0.8.24, Hardhat, Hardhat Ignition
 - **Frontend**: Next.js 14, React 18, TypeScript, Ethers.js 6

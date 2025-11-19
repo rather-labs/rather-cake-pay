@@ -1,6 +1,6 @@
 # Rather Cake Pay - Hardhat Project
 
-This is a Hardhat project for deploying Solidity smart contracts using Hardhat Ignition.
+This is a Hardhat project for deploying Solidity smart contracts using Hardhat.
 
 ## Quick Start
 
@@ -19,15 +19,31 @@ npm run compile
 npm run test
 ```
 
-4. Deploy contracts to your local node (Ignition – see below):
-```bash
-npm run deploy:local
-```
-
-5. Start a standalone Hardhat node:
+4. Start a standalone Hardhat node:
 ```bash
 npm run node
 ```
+
+5. Deploy contracts:
+   - **Localhost**:
+     ```bash
+     npm run deploy:localhost
+     ```
+   - **Sepolia**:
+     ```bash
+     npm run deploy:sepolia
+     ```
+   - **Base Sepolia**:
+     ```bash
+     npm run deploy:base-sepolia
+     ```
+
+### Deployment Details
+
+- The deployment script (`scripts/deploy.js`) handles:
+  - Deploying the `CakeFactory` contract.
+  - Exporting the ABI and deployment metadata to `frontend/public/contract/`.
+  - Updating the `.env.example` file in the frontend with the deployed contract address and network details.
 
 ### Helper scripts
 
@@ -39,7 +55,7 @@ npm run node
 ## Project Structure
 
 - `contracts/` - Solidity smart contracts
-- `ignition/modules/` - Ignition deployment modules
+- `scripts/` - Deployment and interaction scripts
 - `test/` - Test files
 - `hardhat.config.js` - Hardhat configuration
 
@@ -64,7 +80,16 @@ hardhat ignition verify --network <network-name>
 
 ## Configuration
 
-The project is configured to use Solidity 0.8.24 with optimizer enabled. Network configurations can be added in `hardhat.config.js`. Ignition-specific settings are also configured in the config file.
+- Network configurations (e.g., RPC URLs, private keys) are managed via `.env` files.
+- Example `.env` file:
+  ```env
+  SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID
+  SEPOLIA_PRIVATE_KEY=YOUR_PRIVATE_KEY
+  BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+  BASE_SEPOLIA_PRIVATE_KEY=YOUR_PRIVATE_KEY
+  ETHERSCAN_API_KEY=YOUR_ETHERSCAN_API_KEY
+  BASESCAN_API_KEY=YOUR_BASESCAN_API_KEY
+  ```
 
 ## Core workflows covered by this repo
 
@@ -75,10 +100,12 @@ The project is configured to use Solidity 0.8.24 with optimizer enabled. Network
 
 ## Testing
 
-- Run everything: `npm run test`
-- Target a single spec while iterating:
-
-	```bash
-	npx hardhat test test/addBatchedCakeIngredients.test.js
-	```
+- Run all tests:
+  ```bash
+  npm run test
+  ```
+- Run a specific test file:
+  ```bash
+  npx hardhat test test/<test-file>.js
+  ```
 
