@@ -4,43 +4,229 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Plus, X } from 'lucide-react'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useCakes } from '@/hooks/use-cakes'
-import { TEST_USER_ID } from '@/lib/constants'
+import { useCurrentUser } from '@/hooks/use-current-user'
+import { useUserContext } from '@/contexts/UserContext'
+import { ICON_OPTIONS } from '@/lib/constants'
+import { createCake } from '@/lib/actions/cakes'
+import { searchUsers } from '@/lib/actions/users'
+import type { User } from '@/types/database'
 
 export default function Dashboard() {
-  const { cakes, loading, error } = useCakes(TEST_USER_ID)
+  const { walletAddress } = useUserContext()
+  const { user, loading: userLoading } = useCurrentUser()
+  const { cakes, loading: cakesLoading, error, refresh } = useCakes(user?.id || 0)
+  
+  const loading = userLoading || cakesLoading
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [groupName, setGroupName] = useState('')
-  const [selectedIcon, setSelectedIcon] = useState('🍰')
-  const [members, setMembers] = useState<string[]>([''])
+  const [description, setDescription] = useState('')
+  const [selectedIcon, setSelectedIcon] = useState<string>(ICON_OPTIONS[0])
+  const [selectedMembers, setSelectedMembers] = useState<User[]>([])
+  const [memberSearchQueries, setMemberSearchQueries] = useState<string[]>([''])
+  const [memberSearchResults, setMemberSearchResults] = useState<User[][]>([[]])
+  const [showMemberDropdowns, setShowMemberDropdowns] = useState<boolean[]>([false])
+  const [token, setToken] = useState('0x0000000000000000000000000000000000000000') // Default to native ETH
+  const [interestRate, setInterestRate] = useState('0')
+  const [isCreating, setIsCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
-  const iconOptions = ['🍰', '🏖️', '🏠', '🍕', '✈️', '🎉', '🎮', '🏃', '🎬', '☕', '🍔', '🎸']
+  // Helper function to get icon from index
+  const getIconFromIndex = (index: number | null) => {
+    if (index === null || index < 0 || index >= ICON_OPTIONS.length) {
+      return ICON_OPTIONS[0] // Default to first icon
+    }
+    return ICON_OPTIONS[index]
+  }
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.member-search-container')) {
+        setShowMemberDropdowns(new Array(memberSearchQueries.length).fill(false))
+      }
+    }
+
+    if (showMemberDropdowns.some((show) => show)) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [showMemberDropdowns, memberSearchQueries.length])
 
   const handleAddMember = () => {
-    setMembers([...members, ''])
+    setMemberSearchQueries([...memberSearchQueries, ''])
+    setMemberSearchResults([...memberSearchResults, []])
+    setShowMemberDropdowns([...showMemberDropdowns, false])
   }
 
   const handleRemoveMember = (index: number) => {
-    setMembers(members.filter((_, i) => i !== index))
+    // Remove the selected member if one was chosen
+    if (index < selectedMembers.length) {
+      setSelectedMembers(selectedMembers.filter((_, i) => i !== index))
+    }
+    setMemberSearchQueries(memberSearchQueries.filter((_, i) => i !== index))
+    setMemberSearchResults(memberSearchResults.filter((_, i) => i !== index))
+    setShowMemberDropdowns(showMemberDropdowns.filter((_, i) => i !== index))
   }
 
-  const handleMemberChange = (index: number, value: string) => {
-    const newMembers = [...members]
-    newMembers[index] = value
-    setMembers(newMembers)
+  const handleMemberSearch = async (index: number, query: string) => {
+    const newQueries = [...memberSearchQueries]
+    newQueries[index] = query
+    setMemberSearchQueries(newQueries)
+
+    if (query.trim().length === 0) {
+      const newResults = [...memberSearchResults]
+      newResults[index] = []
+      setMemberSearchResults(newResults)
+      const newDropdowns = [...showMemberDropdowns]
+      newDropdowns[index] = false
+      setShowMemberDropdowns(newDropdowns)
+      return
+    }
+
+    // Search users
+    const { data, error } = await searchUsers(query)
+    if (error) {
+      console.error('Error searching users:', error)
+      return
+    }
+
+    const newResults = [...memberSearchResults]
+    newResults[index] = data || []
+    setMemberSearchResults(newResults)
+
+    const newDropdowns = [...showMemberDropdowns]
+    newDropdowns[index] = (data || []).length > 0
+    setShowMemberDropdowns(newDropdowns)
+  }
+
+  const handleSelectMember = (index: number, user: User) => {
+    // Update selected members
+    const newSelected = [...selectedMembers]
+    if (index < newSelected.length) {
+      newSelected[index] = user
+    } else {
+      newSelected.push(user)
+    }
+    setSelectedMembers(newSelected)
+
+    // Clear search query and results
+    const newQueries = [...memberSearchQueries]
+    newQueries[index] = user.username || ''
+    setMemberSearchQueries(newQueries)
+
+    const newResults = [...memberSearchResults]
+    newResults[index] = []
+    setMemberSearchResults(newResults)
+
+    const newDropdowns = [...showMemberDropdowns]
+    newDropdowns[index] = false
+    setShowMemberDropdowns(newDropdowns)
   }
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) return
 
-    // TODO: Implement real cake creation with Supabase
-    console.log('Creating group:', { groupName, selectedIcon, members })
+    setIsCreating(true)
+    setCreateError(null)
 
-    setShowCreateModal(false)
-    setGroupName('')
-    setSelectedIcon('🍰')
-    setMembers([''])
+    try {
+      // Validate token address (should be valid hex address or 0x0 for native)
+      const tokenAddress = token.trim() || '0x0000000000000000000000000000000000000000'
+      if (!tokenAddress.startsWith('0x') || tokenAddress.length !== 42) {
+        setCreateError('Invalid token address. Use 0x0 for native ETH or a valid contract address.')
+        return
+      }
+
+      // Validate interest rate (should be a number between 0 and 100)
+      const interestRateNum = Number.parseFloat(interestRate)
+      if (Number.isNaN(interestRateNum) || interestRateNum < 0 || interestRateNum > 100) {
+        setCreateError('Interest rate must be a number between 0 and 100.')
+        return
+      }
+
+      // Validate that all member search queries have been properly selected
+      // Check if there are any non-empty queries without a corresponding selected member
+      const invalidMembers: number[] = []
+      memberSearchQueries.forEach((query, index) => {
+        const trimmedQuery = query.trim()
+        if (trimmedQuery.length > 0) {
+          const selectedMember = selectedMembers[index]
+          if (!selectedMember || !selectedMember.id) {
+            invalidMembers.push(index + 1)
+          }
+        }
+      })
+
+      if (invalidMembers.length > 0) {
+        setCreateError(
+          `Please select valid users from the dropdown for member ${invalidMembers.length === 1 ? 'field' : 'fields'} ${invalidMembers.join(', ')}. All members must be existing users in the database.`
+        )
+        return
+      }
+
+      // Get user IDs from selected members - ensure all have valid IDs
+      const memberIds = selectedMembers
+        .filter((member) => member?.id)
+        .map((member) => member.id)
+
+      // Double-check: if we have selected members, they should all have IDs
+      if (selectedMembers.length > 0 && memberIds.length !== selectedMembers.length) {
+        setCreateError('Some selected members are invalid. Please ensure all members are selected from the dropdown.')
+        return
+      }
+
+      // Find the index of the selected icon
+      const iconIndex = ICON_OPTIONS.indexOf(selectedIcon as typeof ICON_OPTIONS[number])
+      const iconIndexValue = iconIndex >= 0 ? iconIndex : 0
+
+      if (!user) {
+        setCreateError('User not found. Please register first.')
+        return
+      }
+
+      const { data, error: createError } = await createCake(
+        groupName.trim(),
+        description.trim() || null, // description (null if empty)
+        iconIndexValue, // icon index
+        user.id,
+        memberIds,
+        tokenAddress,
+        interestRateNum
+      )
+
+      if (createError) {
+        setCreateError(createError)
+        return
+      }
+
+      if (data) {
+        // Reset form and close modal
+        setShowCreateModal(false)
+        setGroupName('')
+        setDescription('')
+        setSelectedIcon(ICON_OPTIONS[0])
+        setSelectedMembers([])
+        setMemberSearchQueries([''])
+        setMemberSearchResults([[]])
+        setShowMemberDropdowns([false])
+        setToken('0x0000000000000000000000000000000000000000')
+        setInterestRate('0')
+        setCreateError(null)
+        
+        // Refresh the cakes list to show the new cake
+        await refresh()
+      }
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : 'Failed to create group')
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   return (
@@ -57,12 +243,12 @@ export default function Dashboard() {
             </Link>
             
             <div className="flex items-center gap-4">
-              <Button variant="outline" className="pixel-button border-2 border-[#B4E7CE]">
-                Connect Wallet
-              </Button>
-              <div className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl cursor-pointer hover:scale-110 transition-transform">
-                👤
-              </div>
+              <ConnectButton />
+              {user && (
+                <div className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl cursor-pointer hover:scale-110 transition-transform" title={user.username || 'User'}>
+                  👤
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -86,8 +272,23 @@ export default function Dashboard() {
             {loading ? (
               <div className="text-center py-12">
                 <div className="text-4xl mb-4 animate-bounce">🍰</div>
-                <p className="text-[#4A5568]">Loading your groups...</p>
+                <p className="text-[#4A5568]">
+                  {userLoading ? 'Checking your account...' : 'Loading your groups...'}
+                </p>
               </div>
+            ) : !walletAddress ? (
+              <Card className="p-12 pixel-card bg-gradient-to-br from-[#FFB6D9]/20 to-[#B4E7CE]/20 border-4 border-dashed border-[#FFB6D9] text-center">
+                <div className="text-6xl mb-4">🔗</div>
+                <h3 className="text-xl font-bold pixel-text text-[#2D3748] mb-2">Connect Your Wallet</h3>
+                <p className="text-[#4A5568] mb-6">Connect your wallet to start creating and managing groups!</p>
+                <div className="flex justify-center">
+                  <ConnectButton />
+                </div>
+              </Card>
+            ) : !user ? (
+              <Card className="p-6 pixel-card bg-[#FF6B6B]/10 border-4 border-[#FF6B6B]">
+                <p className="text-[#FF6B6B]">Please register to continue.</p>
+              </Card>
             ) : error ? (
               <Card className="p-6 pixel-card bg-[#FF6B6B]/10 border-4 border-[#FF6B6B]">
                 <p className="text-[#FF6B6B]">Error loading groups: {error.message}</p>
@@ -102,7 +303,7 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4 flex-1">
                           <div className="w-16 h-16 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-3xl">
-                            🍰
+                            {getIconFromIndex(cake.icon_index)}
                           </div>
 
                           <div className="flex-1">
@@ -151,8 +352,22 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold pixel-text text-[#2D3748]">Create New Group</h2>
                 <button 
-                  onClick={() => setShowCreateModal(false)}
+                  type="button"
+                  onClick={() => {
+                    setShowCreateModal(false)
+                    setGroupName('')
+                    setDescription('')
+                    setSelectedIcon(ICON_OPTIONS[0])
+                    setSelectedMembers([])
+                    setMemberSearchQueries([''])
+                    setMemberSearchResults([[]])
+                    setShowMemberDropdowns([false])
+                    setToken('0x0000000000000000000000000000000000000000')
+                    setInterestRate('0')
+                    setCreateError(null)
+                  }}
                   className="w-8 h-8 flex items-center justify-center hover:bg-[#FFF5F7] pixel-art-shadow transition-colors"
+                  aria-label="Close modal"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -161,10 +376,11 @@ export default function Dashboard() {
               <div className="space-y-6">
                 {/* Group Name */}
                 <div>
-                  <label className="block text-sm font-bold pixel-text text-[#2D3748] mb-2">
+                  <label htmlFor="group-name" className="block text-sm font-bold pixel-text text-[#2D3748] mb-2">
                     Group Name
                   </label>
                   <input
+                    id="group-name"
                     type="text"
                     value={groupName}
                     onChange={(e) => setGroupName(e.target.value)}
@@ -173,26 +389,82 @@ export default function Dashboard() {
                   />
                 </div>
 
+                {/* Description */}
+                <div>
+                  <label htmlFor="group-description" className="block text-sm font-bold pixel-text text-[#2D3748] mb-2">
+                    Description (optional)
+                  </label>
+                  <textarea
+                    id="group-description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Add a description for this group..."
+                    rows={3}
+                    className="w-full px-4 py-3 border-4 border-[#FFB6D9] focus:border-[#FF69B4] outline-none pixel-art-shadow bg-white resize-none"
+                  />
+                </div>
+
                 {/* Icon Selection */}
                 <div>
                   <label className="block text-sm font-bold pixel-text text-[#2D3748] mb-2">
                     Choose an Icon
                   </label>
-                  <div className="grid grid-cols-6 gap-2">
-                    {iconOptions.map((icon) => (
+                  <div className="grid grid-cols-6 gap-2" role="group" aria-label="Icon selection">
+                    {ICON_OPTIONS.map((icon) => (
                       <button
                         key={icon}
+                        type="button"
                         onClick={() => setSelectedIcon(icon)}
                         className={`w-full aspect-square text-2xl flex items-center justify-center pixel-art-shadow hover:scale-110 transition-transform ${
                           selectedIcon === icon 
                             ? 'bg-[#FF69B4] border-4 border-[#FF1493]' 
                             : 'bg-[#FFF5F7] border-4 border-[#FFB6D9]'
                         }`}
+                        aria-label={`Select ${icon} icon`}
                       >
                         {icon}
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Token Address */}
+                <div>
+                  <label htmlFor="token-address" className="block text-sm font-bold pixel-text text-[#2D3748] mb-2">
+                    Token Address
+                  </label>
+                  <input
+                    id="token-address"
+                    type="text"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="0x0000000000000000000000000000000000000000 (0x0 for native ETH)"
+                    className="w-full px-4 py-3 border-4 border-[#FFB6D9] focus:border-[#FF69B4] outline-none pixel-art-shadow bg-white font-mono text-sm"
+                  />
+                  <p className="text-xs text-[#4A5568] mt-1">
+                    Use 0x0 or leave empty for native ETH. Enter contract address for ERC-20 tokens.
+                  </p>
+                </div>
+
+                {/* Interest Rate */}
+                <div>
+                  <label htmlFor="interest-rate" className="block text-sm font-bold pixel-text text-[#2D3748] mb-2">
+                    Interest Rate (%)
+                  </label>
+                  <input
+                    id="interest-rate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={interestRate}
+                    onChange={(e) => setInterestRate(e.target.value)}
+                    placeholder="0"
+                    className="w-full px-4 py-3 border-4 border-[#FFB6D9] focus:border-[#FF69B4] outline-none pixel-art-shadow bg-white"
+                  />
+                  <p className="text-xs text-[#4A5568] mt-1">
+                    Annual interest rate (0-100%) to be added to unpaid amounts.
+                  </p>
                 </div>
 
                 {/* Members */}
@@ -201,26 +473,76 @@ export default function Dashboard() {
                     Add Members (optional)
                   </label>
                   <div className="space-y-2">
-                    {members.map((member, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={member}
-                          onChange={(e) => handleMemberChange(index, e.target.value)}
-                          placeholder="Friend's name or wallet address"
-                          className="flex-1 px-4 py-2 border-4 border-[#B4E7CE] focus:border-[#5DD39E] outline-none pixel-art-shadow bg-white text-sm"
-                        />
-                        {members.length > 1 && (
-                          <button
-                            onClick={() => handleRemoveMember(index)}
-                            className="w-10 h-10 flex items-center justify-center bg-[#FF6B6B] hover:bg-[#FF4444] pixel-art-shadow transition-colors"
-                          >
-                            <X className="w-4 h-4 text-white" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                    {memberSearchQueries.map((query, index) => {
+                      const selectedMember = selectedMembers[index]
+                      const searchResults = memberSearchResults[index] || []
+                      const showDropdown = showMemberDropdowns[index] && searchResults.length > 0
+
+                      return (
+                        <div key={`member-${index}`} className="relative member-search-container">
+                          <div className="flex gap-2">
+                            <div className="flex-1 relative">
+                              <input
+                                type="text"
+                                value={selectedMember ? (selectedMember.username || '') : query}
+                                onChange={(e) => {
+                                  if (selectedMember) {
+                                    // Clear selection if user starts typing
+                                    const newSelected = [...selectedMembers]
+                                    newSelected.splice(index, 1)
+                                    setSelectedMembers(newSelected)
+                                  }
+                                  handleMemberSearch(index, e.target.value)
+                                }}
+                                onFocus={() => {
+                                  if (query.trim().length > 0 && searchResults.length > 0) {
+                                    const newDropdowns = [...showMemberDropdowns]
+                                    newDropdowns[index] = true
+                                    setShowMemberDropdowns(newDropdowns)
+                                  }
+                                }}
+                                placeholder="Type username to search..."
+                                className="w-full px-4 py-2 border-4 border-[#B4E7CE] focus:border-[#5DD39E] outline-none pixel-art-shadow bg-white text-sm"
+                                aria-label={`Member ${index + 1}`}
+                              />
+                              {showDropdown && (
+                                <div className="absolute z-10 w-full mt-1 bg-white border-4 border-[#B4E7CE] pixel-art-shadow max-h-48 overflow-y-auto">
+                                  {searchResults.map((user) => (
+                                    <button
+                                      key={user.id}
+                                      type="button"
+                                      onClick={() => handleSelectMember(index, user)}
+                                      className="w-full px-4 py-2 text-left hover:bg-[#F0F9F4] transition-colors border-b-2 border-[#B4E7CE] last:border-b-0"
+                                    >
+                                      <div className="font-medium text-[#2D3748]">
+                                        {user.username || 'No username'}
+                                      </div>
+                                      {user.wallet_address && (
+                                        <div className="text-xs text-[#4A5568] font-mono">
+                                          {user.wallet_address.slice(0, 10)}...
+                                        </div>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {memberSearchQueries.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMember(index)}
+                                className="w-10 h-10 flex items-center justify-center bg-[#FF6B6B] hover:bg-[#FF4444] pixel-art-shadow transition-colors"
+                                aria-label={`Remove member ${index + 1}`}
+                              >
+                                <X className="w-4 h-4 text-white" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
                     <Button
+                      type="button"
                       onClick={handleAddMember}
                       variant="outline"
                       className="w-full pixel-button border-2 border-[#B4E7CE] text-[#2D3748]"
@@ -232,20 +554,40 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {createError && (
+                <div className="mt-4 p-3 bg-[#FF6B6B]/10 border-2 border-[#FF6B6B] rounded">
+                  <p className="text-sm text-[#FF6B6B]">{createError}</p>
+                </div>
+              )}
+
               <div className="flex gap-3 mt-8">
                 <Button
-                  onClick={() => setShowCreateModal(false)}
+                  type="button"
+                  onClick={() => {
+                    setShowCreateModal(false)
+                    setGroupName('')
+                    setDescription('')
+                    setSelectedIcon(ICON_OPTIONS[0])
+                    setSelectedMembers([])
+                    setMemberSearchQueries([''])
+                    setMemberSearchResults([[]])
+                    setShowMemberDropdowns([false])
+                    setToken('0x0000000000000000000000000000000000000000')
+                    setInterestRate('0')
+                    setCreateError(null)
+                  }}
                   variant="outline"
                   className="flex-1 pixel-button border-2 border-[#FFB6D9]"
+                  disabled={isCreating}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleCreateGroup}
-                  disabled={!groupName.trim()}
+                  disabled={!groupName.trim() || isCreating}
                   className="flex-1 bg-[#FF69B4] hover:bg-[#FF1493] pixel-button disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Create Group
+                  {isCreating ? 'Creating...' : 'Create Group'}
                 </Button>
               </div>
             </div>

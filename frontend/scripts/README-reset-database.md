@@ -90,8 +90,7 @@ cakes
   ├── id (BIGSERIAL, PK) - Monotonically increasing integer
   ├── name (TEXT)
   ├── description (TEXT)
-  ├── image_url (TEXT)
-  ├── category (TEXT)
+  ├── icon_index (INTEGER) - Index in the icon options array (0-based)
   ├── token (TEXT) - Token contract address (0x0 for native ETH)
   ├── interest_rate (NUMERIC) - Interest rate for unpaid amounts
   ├── last_cut_at (BIGINT) - Timestamp of last cake cut (uint64)

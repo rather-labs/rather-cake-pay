@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { CakesAPI } from '@/lib/api/cakes'
 import { Cake } from '@/types/database'
@@ -8,10 +8,10 @@ export function useCakes(userId: number) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
-  useEffect(() => {
-    async function fetchCakes() {
+  const fetchCakes = useCallback(async () => {
       try {
         setLoading(true)
+      setError(null)
         const supabase = createClient()
         const cakesAPI = new CakesAPI(supabase)
 
@@ -25,10 +25,11 @@ export function useCakes(userId: number) {
       } finally {
         setLoading(false)
       }
-    }
-
-    fetchCakes()
   }, [userId])
 
-  return { cakes, loading, error }
+  useEffect(() => {
+    fetchCakes()
+  }, [fetchCakes])
+
+  return { cakes, loading, error, refresh: fetchCakes }
 }
