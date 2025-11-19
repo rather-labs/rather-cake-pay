@@ -185,10 +185,8 @@ The off-chain database stores extended metadata that complements on-chain data. 
   name: string;                   // Ingredient/expense name
   description?: string;           // Extended description
   weights: number[];              // Payment weights per member (uint8[])
-  payerAddress: string;           // Address of the payer
-  payerName?: string;             // Payer contact name
-  amount: string;                 // Total expense amount (uint256 as string)
-  paidAmount: number;             // Amount paid by payer (float)
+  payerIds: number[];             // Ids of payers
+  amounts: number[];              // amount paid by each payer (uint256 as string)
   receiptUrl?: string;            // URL to uploaded receipt image
   status: 'pending' | 'submitted' | 'settled';  // Submission status
   createdAt: timestamp;          // Expense creation timestamp

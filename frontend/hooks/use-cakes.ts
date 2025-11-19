@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/client'
 import { CakesAPI } from '@/lib/api/cakes'
 import { Cake } from '@/types/database'
 
-export function useCakes(userId: string) {
+export function useCakes(userId: number) {
   const [cakes, setCakes] = useState<Cake[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
