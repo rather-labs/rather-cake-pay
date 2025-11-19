@@ -13,13 +13,18 @@ contract CakeFactory {
         uint64 createdAt; // Timestamp of cake creation (64-bit, valid until 2106)
         uint64 lastCutAt; // Timestamp of last cake cut (64-bit, valid until 2106)
         uint64 lastCutBatchedIngredientsId; // ID of last batched ingredients included in a cut
+        uint128 latestIngredientId; // Last ingredient ID added to the cake
+        uint64 billingPeriod; // Duration between expected settlements
+        uint64 nextDueAt; // Timestamp for the next expected settlement
         uint16 interestRate; // Interest rate for unpaid amounts in this cake
         bool active; // Whether the cake is active, half or more of members can disable the cake
         address token; // Token contract address (0x0 for native ETH)
         bool[] votesToDisable; // Current Votes to disable the cake
         uint64[] memberIds; // Array of user IDs in the cake
-        uint256[] currentBalances; // Current ammounts to be paid by each member
+        uint16[] memberWeights; // Payment weights per member (same order as memberIds)
+        int256[] currentBalances; // Current ammounts to be paid by each member
     }
+
 
     // Struct to represent off-chain batched cake ingredients (expense) within a cake
     struct BatchedCakeIngredients {
@@ -46,6 +51,7 @@ contract CakeFactory {
 
     // Mapping from user Ids to mapping of cakes its participating in and whete it has debts to the cake
     mapping(uint64 => mapping(uint128 => bool)) public userCakes;
+    mapping(uint128 => mapping(uint64 => uint64)) public cakeMemberIndex;   // quick lookup for member index in cake arrays 
 
     // Total number of users registered
     uint64 public totalUsers;
@@ -60,6 +66,20 @@ contract CakeFactory {
     event CakeCreated(uint128 indexed cakeId);
     event BatchedCakeIngredientsAdded(uint128 indexed batchedCakeIngredientsId, uint128 indexed cakeId);
     event CakeCutted(uint128 indexed cakeId);
+
+    error CakeDoesNotExist(uint128 cakeId);
+    error CakeInactive(uint128 cakeId);
+    error InvalidMembers();
+    error InvalidWeights();
+    error InvalidBillingPeriod();
+    error MemberNotRegistered(uint64 memberId);
+    error DuplicateMember(uint64 memberId);
+    error NotMember(uint64 memberId);
+    error NothingToCut(uint128 cakeId);
+    error AmountTooLarge();
+
+
+    uint16 private constant BPS_DENOMINATOR = 10_000;
 
     /**
      * @notice Initializes the contract
@@ -90,17 +110,81 @@ contract CakeFactory {
         return totalUsers;
     }
 
-    // /**
-    //  * @notice Creates a new cake (group)
-    //  * @param token address of the token that will be used to pay for the cake
-    //  * @param memberIds array of user ids that will be members of the cake
-    //  * @param interestRate interest rate for unpaid ammounts of the cake
-    //  * @return The ID of the newly created cake
-    //  */
-    // function createCake(address token, uint64[] memory memberIds, uint16 interestRate) public returns (uint128) {
-    //     // TODO: Implement
-    //     return 0;
-    // }
+    /**
+     * @notice Creates a new cake (group)
+     * @param token address of the token that will be used to pay for the cake
+     * @param memberIds array of user ids that will be members of the cake
+     * @param memberWeightsBps weights per member in basis points (must sum to 10,000)
+     * @param interestRate interest rate for unpaid ammounts of the cake
+     * @return The ID of the newly created cake
+     */
+    function createCake(
+        address token,
+        uint64[] memory memberIds,
+        uint16[] memory memberWeightsBps,
+        uint16 interestRate,
+        uint64 billingPeriod
+    ) public returns (uint128) {
+        if (memberIds.length < 2 || memberIds.length != memberWeightsBps.length) {
+            revert InvalidMembers();
+        }
+        if (billingPeriod == 0) {
+            revert InvalidBillingPeriod();
+        }
+
+        uint256 accumulatedWeights;
+        for (uint256 i = 0; i < memberWeightsBps.length; i++) {
+            accumulatedWeights += memberWeightsBps[i];
+        }
+        if (accumulatedWeights != BPS_DENOMINATOR) {
+            revert InvalidWeights();
+        }
+
+
+        totalCakes++;
+        uint128 cakeId = totalCakes;
+        Cake storage cake = cakes[cakeId];
+
+
+        cake.createdAt = uint64(block.timestamp);
+        cake.lastCutAt = uint64(block.timestamp);
+        cake.lastCutBatchedIngredientsId = 0;
+        cake.latestIngredientId = 0;
+        cake.billingPeriod = billingPeriod;
+        cake.nextDueAt = uint64(block.timestamp + billingPeriod);
+        cake.interestRate = interestRate;
+        cake.active = true;
+        cake.token = token;
+
+
+        cake.memberIds = new uint64[](memberIds.length);
+        cake.memberWeights = new uint16[](memberIds.length);
+        cake.currentBalances = new int256[](memberIds.length);
+        cake.votesToDisable = new bool[](memberIds.length);
+
+
+        for (uint256 i = 0; i < memberIds.length; i++) {
+            uint64 memberId = memberIds[i];
+            if (memberId == 0 || userAddresses[memberId] == address(0)) {
+                revert MemberNotRegistered(memberId);
+            }
+            if (cakeMemberIndex[cakeId][memberId] != 0) {
+                revert DuplicateMember(memberId);
+            }
+
+
+            cake.memberIds[i] = memberId;
+            cake.memberWeights[i] = memberWeightsBps[i];
+            cake.currentBalances[i] = 0;
+            cakeMemberIndex[cakeId][memberId] = uint64(i + 1);
+            userCakes[memberId][cakeId] = true;
+        }
+
+
+        emit CakeCreated(cakeId);
+        return cakeId;
+    }
+
 
     // /**
     //  * @notice Adds a new cake ingredient to a cake
@@ -164,45 +248,35 @@ contract CakeFactory {
     //     // TODO: Implement
     // }
 
-    // /**
-    //  * @notice Gets the details of a cake
-    //  * @param cakeId The ID of the cake
-    //  * @return memberIds Array of member IDs in the cake
-    //  * @return currentBalances Current balances for each member
-    //  * @return interestRate Interest rate for unpaid amounts
-    //  * @return active Whether the cake is active
-    //  * @return token Token contract address
-    //  * @return lastCutAt Timestamp of last cake cut
-    //  * @return lastCutBatchedIngredientsId ID of last batched ingredients included in a cut
-    //  */
-    // function getCakeDetails(
-    //     uint128 cakeId
-    // )
-    //     public
-    //     view
-    //     returns (
-    //         uint64[] memory memberIds,
-    //         uint256[] memory currentBalances,
-    //         uint16 interestRate,
-    //         bool active,
-    //         address token,
-    //         uint64 lastCutAt,
-    //         uint64 lastCutBatchedIngredientsId
-    //     )
-    // {
-    //     // Check if cake exists (createdAt will be non-zero if cake was created)
-    //     require(cakes[cakeId].createdAt != 0, "Cake does not exist");
+    /**
+     * @notice Gets the high-level details of a cake
+     * @param cakeId The ID of the cake
+     * @return memberIds Array of member IDs in the cake
+     * @return currentBalances Current balances for each member (same order as memberIds)
+     * @return interestRate Interest rate for unpaid amounts (in BPS)
+     * @return active Whether the cake is currently active
+     * @return token Token contract address (0x0 for native ETH)
+     */
+    function getCakeDetails(
+        uint128 cakeId
+    )
+        public
+        view
+        returns (
+            uint64[] memory memberIds,
+            int256[] memory currentBalances,
+            uint16 interestRate,
+            bool active,
+            address token
+        )
+    {
+        Cake storage cake = cakes[cakeId];
+        if (cake.createdAt == 0) {
+            revert CakeDoesNotExist(cakeId);
+        }
 
-    //     return (
-    //         cakes[cakeId].memberIds,
-    //         cakes[cakeId].currentBalances,
-    //         cakes[cakeId].interestRate,
-    //         cakes[cakeId].active,
-    //         cakes[cakeId].token,
-    //         cakes[cakeId].lastCutAt,
-    //         cakes[cakeId].lastCutBatchedIngredientsId
-    //     );
-    // }
+        return (cake.memberIds, cake.currentBalances, cake.interestRate, cake.active, cake.token);
+    }
 
     // /**
     //  * @notice Gets all members of a cake
