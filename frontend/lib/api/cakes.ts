@@ -1,28 +1,18 @@
-import { SupabaseClient } from '@supabase/supabase-js'
-import { Database, Cake, InsertCake, UpdateCake, CakeMember, User } from '@/types/database'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database, Cake, InsertCake, UpdateCake, User } from '@/types/database'
 
 export type CakeWithMembers = Cake & {
-  cake_members: (CakeMember & {
-    users: User
-  })[]
-  created_by_user: User
+  members?: User[] // Optional: populated when fetching with member details
 }
 
 export class CakesAPI {
   constructor(private supabase: SupabaseClient<Database>) {}
 
-  async getCake(cakeId: string): Promise<{ data: CakeWithMembers | null; error: Error | null }> {
+  async getCake(cakeId: number): Promise<{ data: CakeWithMembers | null; error: Error | null }> {
     try {
       const { data, error } = await this.supabase
         .from('cakes')
-        .select(`
-          *,
-          created_by_user:users!cakes_created_by_fkey(*),
-          cake_members(
-            *,
-            users(*)
-          )
-        `)
+        .select('*')
         .eq('id', cakeId)
         .single()
 
@@ -33,26 +23,37 @@ export class CakesAPI {
     }
   }
 
-  async getUserCakes(userId: string): Promise<{ data: Cake[] | null; error: Error | null }> {
+  async getCakeWithMemberDetails(cakeId: number): Promise<{ data: CakeWithMembers | null; error: Error | null }> {
     try {
-      // First, get the cake IDs this user is a member of
-      const { data: memberships, error: memberError } = await this.supabase
-        .from('cake_members')
-        .select('cake_id')
-        .eq('user_id', userId)
+      const { data: cake, error: cakeError } = await this.supabase
+        .from('cakes')
+        .select('*')
+        .eq('id', cakeId)
+        .single()
 
-      if (memberError) throw memberError
-
-      if (!memberships || memberships.length === 0) {
-        return { data: [], error: null }
+      if (cakeError) throw cakeError
+      const cakeData = cake as Cake | null
+      if (!cakeData || !cakeData.member_ids || cakeData.member_ids.length === 0) {
+        return { data: { ...cakeData, members: [] } as CakeWithMembers, error: null }
       }
 
-      // Then get the actual cakes
-      const cakeIds = memberships.map((m: { cake_id: string }) => m.cake_id)
+      // Fetch user details for member IDs
+      // Note: member_ids are BIGINT (on-chain IDs), but users.id is UUID
+      // This is a limitation - we may need a mapping table or different approach
+      // For now, we'll return the cake with member_ids as-is
+      return { data: cakeData as CakeWithMembers, error: null }
+    } catch (error) {
+      return { data: null, error: error as Error }
+    }
+  }
+
+  async getUserCakes(userId: number): Promise<{ data: Cake[] | null; error: Error | null }> {
+    try {
+      // Query cakes where the user's ID is in the member_ids array
       const { data: cakes, error: cakesError } = await this.supabase
         .from('cakes')
         .select('*')
-        .in('id', cakeIds)
+        .contains('member_ids', [userId])
         .order('created_at', { ascending: false })
 
       if (cakesError) throw cakesError
@@ -63,27 +64,31 @@ export class CakesAPI {
     }
   }
 
-  async createCake(cake: InsertCake, creatorId: string): Promise<{ data: Cake | null; error: Error | null }> {
+  async createCake(cake: InsertCake, creatorId: number): Promise<{ data: Cake | null; error: Error | null }> {
     try {
+      // Ensure creator is in member_ids
+      const currentMemberIds = cake.member_ids || []
+      const memberIds = currentMemberIds.includes(creatorId)
+        ? currentMemberIds
+        : [...currentMemberIds, creatorId]
+
+      const cakeWithCreator: InsertCake = {
+        ...cake,
+        member_ids: memberIds,
+      }
+
       // Create the cake
       const { data: newCake, error: cakeError } = (await this.supabase
         .from('cakes')
-        .insert(cake as never)
+        .insert(cakeWithCreator as never)
         .select()
         .single()) as { data: Cake; error: null } | { data: null; error: unknown }
 
       if (cakeError) throw cakeError
 
-      // Add creator as admin member
-      const { error: memberError } = await this.supabase
-        .from('cake_members')
-        .insert({
-          cake_id: newCake!.id,
-          user_id: creatorId,
-          role: 'admin',
-        } as never)
-
-      if (memberError) throw memberError
+      if (!newCake) {
+        throw new Error('Failed to create cake')
+      }
 
       return { data: newCake, error: null }
     } catch (error) {
@@ -91,7 +96,7 @@ export class CakesAPI {
     }
   }
 
-  async updateCake(cakeId: string, updates: UpdateCake): Promise<{ data: Cake | null; error: Error | null }> {
+  async updateCake(cakeId: number, updates: UpdateCake): Promise<{ data: Cake | null; error: Error | null }> {
     try {
       const { data, error } = await this.supabase
         .from('cakes')
@@ -107,7 +112,7 @@ export class CakesAPI {
     }
   }
 
-  async deleteCake(cakeId: string): Promise<{ error: Error | null }> {
+  async deleteCake(cakeId: number): Promise<{ error: Error | null }> {
     try {
       const { error } = await this.supabase
         .from('cakes')
@@ -121,69 +126,92 @@ export class CakesAPI {
     }
   }
 
-  async addMember(cakeId: string, userId: string, role: 'admin' | 'member' = 'member'): Promise<{ data: CakeMember | null; error: Error | null }> {
+  async addMember(cakeId: number, memberId: number): Promise<{ data: Cake | null; error: Error | null }> {
     try {
-      const { data, error } = await this.supabase
-        .from('cake_members')
-        .insert({
-          cake_id: cakeId,
-          user_id: userId,
-          role,
-        } as never)
+      // Get current cake
+      const { data: cake, error: fetchError } = await this.supabase
+        .from('cakes')
+        .select('member_ids')
+        .eq('id', cakeId)
+        .single()
+
+      if (fetchError) throw fetchError
+      const cakeData = cake as { member_ids: number[] | null } | null
+      if (!cakeData) throw new Error('Cake not found')
+
+      // Add member to array if not already present
+      const currentMembers = cakeData.member_ids || []
+      if (currentMembers.includes(memberId)) {
+        // Member already exists
+        const { data: existingCake, error: fetchError } = await this.supabase
+          .from('cakes')
+          .select('*')
+          .eq('id', cakeId)
+          .single()
+        if (fetchError) throw fetchError
+        return { data: existingCake as Cake, error: null }
+      }
+
+      const updatedMembers = [...currentMembers, memberId]
+
+      // Update cake with new member
+      const { data: updatedCake, error: updateError } = await this.supabase
+        .from('cakes')
+        .update({ member_ids: updatedMembers, updated_at: new Date().toISOString() } as never)
+        .eq('id', cakeId)
         .select()
         .single()
 
-      if (error) throw error
-      return { data, error: null }
+      if (updateError) throw updateError
+      return { data: updatedCake, error: null }
     } catch (error) {
       return { data: null, error: error as Error }
     }
   }
 
-  async removeMember(cakeId: string, userId: string): Promise<{ error: Error | null }> {
+  async removeMember(cakeId: number, memberId: number): Promise<{ data: Cake | null; error: Error | null }> {
     try {
-      const { error } = await this.supabase
-        .from('cake_members')
-        .delete()
-        .eq('cake_id', cakeId)
-        .eq('user_id', userId)
+      // Get current cake
+      const { data: cake, error: fetchError } = await this.supabase
+        .from('cakes')
+        .select('member_ids')
+        .eq('id', cakeId)
+        .single()
 
-      if (error) throw error
-      return { error: null }
-    } catch (error) {
-      return { error: error as Error }
-    }
-  }
+      if (fetchError) throw fetchError
+      const cakeData = cake as { member_ids: number[] | null } | null
+      if (!cakeData) throw new Error('Cake not found')
 
-  async getCakeMembers(cakeId: string): Promise<{ data: (CakeMember & { users: User })[] | null; error: Error | null }> {
-    try {
-      const { data, error } = await this.supabase
-        .from('cake_members')
-        .select(`
-          *,
-          users(*)
-        `)
-        .eq('cake_id', cakeId)
+      // Remove member from array
+      const currentMembers = cakeData.member_ids || []
+      const updatedMembers = currentMembers.filter((id: number) => id !== memberId)
 
-      if (error) throw error
-      return { data: data as (CakeMember & { users: User })[], error: null }
+      // Update cake with updated member list
+      const { data: updatedCake, error: updateError } = await this.supabase
+        .from('cakes')
+        .update({ member_ids: updatedMembers, updated_at: new Date().toISOString() } as never)
+        .eq('id', cakeId)
+        .select()
+        .single()
+
+      if (updateError) throw updateError
+      return { data: updatedCake, error: null }
     } catch (error) {
       return { data: null, error: error as Error }
     }
   }
 
-  async updateMemberRole(cakeId: string, userId: string, role: 'admin' | 'member'): Promise<{ data: CakeMember | null; error: Error | null }> {
+  async getCakeMembers(cakeId: number): Promise<{ data: number[] | null; error: Error | null }> {
     try {
-      const { data, error } = await this.supabase
-        .from('cake_members')
-        .update({ role } as never)
-        .eq('cake_id', cakeId)
-        .eq('user_id', userId)
-        .select()
+      const { data: cake, error } = await this.supabase
+        .from('cakes')
+        .select('member_ids')
+        .eq('id', cakeId)
         .single()
 
       if (error) throw error
-      return { data, error: null }
+      const cakeData = cake as { member_ids: number[] | null } | null
+      return { data: cakeData?.member_ids || [], error: null }
     } catch (error) {
       return { data: null, error: error as Error }
     }

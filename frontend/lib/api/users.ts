@@ -1,10 +1,10 @@
-import { SupabaseClient } from '@supabase/supabase-js'
-import { Database, User, InsertUser, UpdateUser } from '@/types/database'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database, User, InsertUser, UpdateUser } from '@/types/database'
 
 export class UsersAPI {
   constructor(private supabase: SupabaseClient<Database>) {}
 
-  async getUser(userId: string): Promise<{ data: User | null; error: Error | null }> {
+  async getUser(userId: number): Promise<{ data: User | null; error: Error | null }> {
     try {
       const { data, error } = await this.supabase
         .from('users')
@@ -49,7 +49,7 @@ export class UsersAPI {
     }
   }
 
-  async updateUser(userId: string, updates: UpdateUser): Promise<{ data: User | null; error: Error | null }> {
+  async updateUser(userId: number, updates: UpdateUser): Promise<{ data: User | null; error: Error | null }> {
     try {
       const { data, error } = await this.supabase
         .from('users')
