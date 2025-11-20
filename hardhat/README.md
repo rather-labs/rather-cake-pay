@@ -24,19 +24,15 @@ npm run test
 npm run node
 ```
 
-5. Deploy contracts:
-   - **Localhost**:
-     ```bash
-     npm run deploy:localhost
-     ```
-   - **Sepolia**:
-     ```bash
-     npm run deploy:sepolia
-     ```
-   - **Base Sepolia**:
-     ```bash
-     npm run deploy:base-sepolia
-     ```
+5. Deploy contracts (see `package.json` for all scripts):
+   - **Localhost** – `npm run deploy:localhost`
+   - **Sepolia** – `npm run deploy:sepolia`
+   - **Base Sepolia** – `npm run deploy:base-sepolia`
+
+6. (Optional) Launch the Ignition workflow for localhost demos:
+   ```bash
+   npm run deploy:local
+   ```
 
 ### Deployment Details
 
@@ -45,7 +41,7 @@ npm run node
   - Exporting the ABI and deployment metadata to `frontend/public/contract/`.
   - Updating the `.env.example` file in the frontend with the deployed contract address and network details.
 
-### Helper scripts
+### Helper Scripts
 
 - `scripts/startNode.sh`: wipes previous Ignition artifacts, recompiles, and boots a node if one isn’t already running.
 - `scripts/verifyRegister.sh`: deploys via Ignition on `localhost` and immediately runs `scripts/interact.js` for a sanity check (registers users).
@@ -80,32 +76,35 @@ hardhat ignition verify --network <network-name>
 
 ## Configuration
 
-- Network configurations (e.g., RPC URLs, private keys) are managed via `.env` files.
-- Example `.env` file:
-  ```env
-  SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID
-  SEPOLIA_PRIVATE_KEY=YOUR_PRIVATE_KEY
-  BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
-  BASE_SEPOLIA_PRIVATE_KEY=YOUR_PRIVATE_KEY
-  ETHERSCAN_API_KEY=YOUR_ETHERSCAN_API_KEY
-  BASESCAN_API_KEY=YOUR_BASESCAN_API_KEY
-  ```
+Network settings live in `.env` (loaded via `dotenv`). Minimum variables required for public deployments:
 
-## Core workflows covered by this repo
+```env
+SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID
+SEPOLIA_PRIVATE_KEY=YOUR_PRIVATE_KEY
+BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+BASE_SEPOLIA_PRIVATE_KEY=YOUR_PRIVATE_KEY
+ETHERSCAN_API_KEY=YOUR_ETHERSCAN_API_KEY
+BASESCAN_API_KEY=YOUR_BASESCAN_API_KEY
+UNISWAP_ROUTER_ADDRESS=0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b
+UNISWAP_ROUTER_ADDRESS_SEPOLIA=0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b
+LEMON_API_URL=https://api.example.lemon
+LEMON_API_URL_SEPOLIA=https://api.example.lemon
+SETTLEMENT_TOKEN=0x0000000000000000000000000000000000000000 # e.g. USDC on Sepolia
+```
 
-- **User registration & cake creation** (`registerUser`, `createCake`)
-- **Expense batching** (`addBatchedCakeIngredients`) with optional weight overrides and multiple payers
-- **Settlement** (`cutCake`) including overdue-interest accrual and balance updates
-- **Read helpers** (`getCakeDetails`, `getCakeMembers`, `getCakeMemberBalance`, etc.) for the frontend and scripts
+> Network-specific keys (suffix `_SEPOLIA`, `_BASESEPOLIA`, etc.) override the generic ones so `deploy.js` can emit correct metadata for each chain.
+
+## Core Smart-Contract Workflows
+
+- **User onboarding**: `registerUser` manages the shared user ID registry used across cakes.
+- **Cake lifecycle**: `createCake` configures member sets, weights, billing period, interest rate, and the contribution token that can later be swapped through Uniswap.
+- **Batched expenses**: `addBatchedCakeIngredients` records multiple payers/amounts per billing cycle and validates alignment with member weights.
+- **Settlement (“cutting the cake”)**: `cutCake` accrues interest, applies outstanding batched ingredients, and advances the due date.
+- **Read helpers**: `getCakeDetails`, `getCakeMembers`, `getCakeIngredientDetails`, `getCakeMemberBalance`, `getUserCakes`, etc., power the frontend dashboards and scripts.
 
 ## Testing
 
-- Run all tests:
-  ```bash
-  npm run test
-  ```
-- Run a specific test file:
-  ```bash
-  npx hardhat test test/<test-file>.js
-  ```
-
+- Run all tests: `npm run test`
+- Run a targeted test file: `npx hardhat test test/<file>.js`
+- Lint Solidity: `npm run lint`
+- Format Solidity: `npm run format`

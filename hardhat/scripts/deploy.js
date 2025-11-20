@@ -62,14 +62,14 @@ const buildIntegrationConfig = (networkName) => {
 
   return {
     uniswap: {
-      supported: Boolean(routerAddress),
-      routerAddress,
-      envKey: routerEnvKey,
+      supported: Boolean(routerAddress), // True if a router address is set
+      routerAddress, // The Uniswap router address
+      envKey: routerEnvKey, // The environment variable key used
     },
     lemon: {
-      supported: Boolean(lemonApiUrl),
-      apiBaseUrl: lemonApiUrl,
-      envKey: lemonEnvKey,
+      supported: Boolean(lemonApiUrl), // True if a Lemon API URL is set
+      apiBaseUrl: lemonApiUrl, // The Lemon API URL
+      envKey: lemonEnvKey, // The environment variable key used
     },
   };
 };
@@ -159,11 +159,9 @@ const updateFrontendEnv = async (deploymentInfo) => {
     `NEXT_PUBLIC_CHAIN_ID=${deploymentInfo.chainId}`,
     `NEXT_PUBLIC_NETWORK_NAME=${deploymentInfo.network}`,
     `NEXT_PUBLIC_RPC_URL=${deploymentInfo.publicRpcUrl || ""}`,
-    `NEXT_PUBLIC_UNISWAP_ROUTER=${
-      deploymentInfo.integrations.uniswap.routerAddress || ""
+    `NEXT_PUBLIC_UNISWAP_ROUTER=${deploymentInfo.integrations.uniswap.routerAddress || ""
     }`,
-    `NEXT_PUBLIC_LEMON_API_URL=${
-      deploymentInfo.integrations.lemon.apiBaseUrl || ""
+    `NEXT_PUBLIC_LEMON_API_URL=${deploymentInfo.integrations.lemon.apiBaseUrl || ""
     }`,
     "",
     "# Update the values above or copy to .env.local",
