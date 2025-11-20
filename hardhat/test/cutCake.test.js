@@ -3,16 +3,32 @@ const { ethers, network } = require("hardhat");
 
 describe("CakeFactory - cutCake", function () {
 	let cakeFactory;
+	let mockRouter, mockPoolManager, mockPermit2;
 	let owner, addr1, addr2, addr3;
 	const billingPeriod = 7 * 24 * 60 * 60; // one week
 	const interestRate = 150; // 1.5% per overdue period
 	const defaultWeights = [5000, 3000, 2000];
 
 	beforeEach(async function () {
-		const CakeFactory = await ethers.getContractFactory("CakeFactory");
-		cakeFactory = await CakeFactory.deploy();
-		await cakeFactory.waitForDeployment();
 		[owner, addr1, addr2, addr3] = await ethers.getSigners();
+
+		// Deploy mock contracts
+		const MockRouterFactory = await ethers.getContractFactory("MockUniversalRouter");
+		const MockPoolManagerFactory = await ethers.getContractFactory("MockPoolManager");
+		const MockPermit2Factory = await ethers.getContractFactory("MockPermit2");
+
+		mockRouter = await MockRouterFactory.deploy();
+		mockPoolManager = await MockPoolManagerFactory.deploy();
+		mockPermit2 = await MockPermit2Factory.deploy();
+
+		// Deploy CakeFactory with mock addresses
+		const CakeFactory = await ethers.getContractFactory("CakeFactory");
+		cakeFactory = await CakeFactory.deploy(
+			await mockRouter.getAddress(),
+			await mockPoolManager.getAddress(),
+			await mockPermit2.getAddress()
+		);
+		await cakeFactory.waitForDeployment();
 	});
 
 	async function register(address) {

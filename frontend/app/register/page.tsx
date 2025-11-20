@@ -4,17 +4,22 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAccount } from 'wagmi';
+import Image from 'next/image';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useAccount, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import { registerUser } from '@/lib/actions/users';
 import { useUserContext } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
 import { UsersAPI } from '@/lib/api/users';
 import Link from 'next/link';
-import Image from 'next/image';
-import { formatAddress } from '@/lib/utils/format';
+import CakeFactoryArtifactAbi from '@/public/contracts/CakeFactory.json';
 import { Header } from '@/components/Header';
-import { Footer } from '@/components/Footer';
+import { formatAddress } from '@/lib/utils/format';
+import { Footer } from 'react-day-picker';
+
+export const CAKE_FACTORY_ABI = CakeFactoryArtifactAbi.abi;
+export const CONTRACT_ADDRESS_BASE_SEPOLIA = process.env
+  .NEXT_PUBLIC_CONTRACT_ADDRESS_BASE_SEPOLIA as `0x${string}`;
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -27,6 +32,70 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [wagmiReady, setWagmiReady] = useState(false);
   const [userCheckComplete, setUserCheckComplete] = useState(false);
+
+  const { writeContract, data: hash, isPending: isWriting, error: writeError } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  // Add effect to handle transaction errors
+  useEffect(() => {
+    if (writeError) {
+      console.error('Transaction error:', writeError);
+      setError(`Failed to register on blockchain: ${writeError.message}`);
+      setIsRegistering(false);
+    }
+  }, [writeError]);
+
+  // Add effect to handle successful transaction
+  useEffect(() => {
+    if (isConfirmed && hash) {
+      const completeRegistration = async () => {
+        try {
+          // Now register in database with the transaction hash
+          if (!walletAddress) return;
+
+          const { data, error: registerError } = await registerUser(
+            walletAddress,
+            username.trim(),
+            avatarUrl.trim() || null
+          );
+
+          if (registerError) {
+            if (
+              registerError.includes('wallet_address') &&
+              (registerError.includes('duplicate') || registerError.includes('unique'))
+            ) {
+              router.push('/dashboard');
+              return;
+            }
+            if (
+              registerError.includes('username') &&
+              (registerError.includes('duplicate') || registerError.includes('unique'))
+            ) {
+              setError('This username is already taken. Please choose a different username.');
+              return;
+            }
+            setError(registerError);
+            return;
+          }
+
+          if (data) {
+            // Redirect to dashboard after successful registration
+            router.push('/dashboard');
+            router.refresh();
+          }
+        } catch (err) {
+          console.error('Error completing registration:', err);
+          setError(err instanceof Error ? err.message : 'Failed to complete registration');
+        } finally {
+          setIsRegistering(false);
+        }
+      };
+
+      completeRegistration();
+    }
+  }, [isConfirmed, hash, walletAddress, username, avatarUrl, router]);
 
   // Wait for wagmi to be ready (status is not 'reconnecting' or initializing)
   useEffect(() => {
@@ -99,42 +168,32 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      const { data, error: registerError } = await registerUser(
-        walletAddress,
-        username.trim(),
-        avatarUrl.trim() || null
-      );
+      // First, check if user already exists in database
+      const supabase = createClient();
+      const usersAPI = new UsersAPI(supabase);
+      const { data: existingUser } = await usersAPI.getUserByWalletAddress(walletAddress);
 
-      if (registerError) {
-        // Check if error is due to duplicate wallet address (user already exists)
-        if (
-          registerError.includes('wallet_address') &&
-          (registerError.includes('duplicate') || registerError.includes('unique'))
-        ) {
-          // User already exists, redirect to dashboard
-          router.push('/dashboard');
-          return;
-        }
-        // Check if error is due to duplicate username
-        if (
-          registerError.includes('username') &&
-          (registerError.includes('duplicate') || registerError.includes('unique'))
-        ) {
-          setError('This username is already taken. Please choose a different username.');
-          return;
-        }
-        setError(registerError);
+      if (existingUser) {
+        // User already exists, redirect to dashboard
+        router.push('/dashboard');
         return;
       }
 
-      if (data) {
-        // Redirect to dashboard after successful registration
-        router.push('/dashboard');
-        router.refresh(); // Refresh to update user state
-      }
+      // Register on blockchain first
+      console.log('Registering user on blockchain:', walletAddress);
+
+      writeContract({
+        address: CONTRACT_ADDRESS_BASE_SEPOLIA,
+        abi: CAKE_FACTORY_ABI,
+        functionName: 'registerUser',
+        args: [walletAddress as `0x${string}`],
+      });
+
+      // The rest of the registration (database) will happen in the useEffect
+      // after the transaction is confirmed
     } catch (err) {
+      console.error('Error initiating registration:', err);
       setError(err instanceof Error ? err.message : 'Failed to register');
-    } finally {
       setIsRegistering(false);
     }
   };
@@ -257,10 +316,33 @@ export default function RegisterPage() {
 
                   <Button
                     type="submit"
-                    disabled={isRegistering || !username.trim() || username.trim().length < 2}
+                    disabled={
+                      isRegistering ||
+                      isWriting ||
+                      isConfirming ||
+                      !username.trim() ||
+                      username.trim().length < 2
+                    }
                     className="w-full bg-[#FF69B4] hover:bg-[#FF1493] pixel-button disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isRegistering ? 'Registering...' : 'Register'}
+                    {isWriting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                        Signing Transaction...
+                      </>
+                    ) : isConfirming ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                        Confirming on Blockchain...
+                      </>
+                    ) : isRegistering ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                        Completing Registration...
+                      </>
+                    ) : (
+                      'Register'
+                    )}
                   </Button>
                 </form>
               )}
