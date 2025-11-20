@@ -32,20 +32,20 @@ const { buildModule } = require("@nomicfoundation/hardhat-ignition/modules");
 const UNISWAP_V4_ADDRESSES = {
   // Ethereum Mainnet
   mainnet: {
-    universalRouter: "0x66a9893cc07d91d95644aedd05d03f95e1dba8af", // UniversalRouterV2
+    universalRouter: "0x66a9893cc07d91d95644aedd05d03f95e1dba8af", //
     poolManager: "0x000000000004444c5dc75cB358380D2e3dE08A90",
-    permit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3", // Same across all networks
+    permit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3", // 
   },
   // Ethereum Sepolia Testnet
   sepolia: {
-    universalRouter: "0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b", // UniversalRouterV2
-    poolManager: "0xE03A1074c86CFeDd5C142C4F04F1a1536e203543", // CREATE2 deployment - same across all networks
+    universalRouter: "0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b", // 
+    poolManager: "0xE03A1074c86CFeDd5C142C4F04F1a1536e203543", // 
     permit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
   },
-  // Base Sepolia Testnet
+  // Base Sepolia Testnet https://docs.uniswap.org/contracts/v4/deployments#sepolia-11155111
   baseSepolia: {
-    universalRouter: "0x492e6456d9528771018deb9e87ef7750ef184104", // UniversalRouterV2
-    poolManager: "0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408", // CREATE2 deployment - same across all networks
+    universalRouter: "0x492e6456d9528771018deb9e87ef7750ef184104", // 
+    poolManager: "0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408", //
     permit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
   },
   // Localhost/Hardhat (mock addresses for development)

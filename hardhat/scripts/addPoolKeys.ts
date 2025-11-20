@@ -15,7 +15,7 @@ interface PoolKeyConfig {
 }
 
 /**
- * Configuration for pool keys to submit
+ * Configuration for pool keys to add
  * Can be provided via JSON file or command line arguments
  */
 interface PoolKeySubmissionConfig {
@@ -28,8 +28,6 @@ interface PoolKeySubmissionConfig {
  * Currency is a uint256 that wraps the address
  */
 function wrapCurrency(address: string): bigint {
-  // Currency.wrap(address) - in Solidity this is just casting address to uint256
-  // In TypeScript, we convert the address to a bigint
   return BigInt(address);
 }
 
@@ -61,9 +59,9 @@ function constructPoolKey(config: PoolKeyConfig): {
 }
 
 /**
- * Submits a single pool key to the CakeFactory contract
+ * Adds a single pool key to the CakeFactory contract
  */
-async function submitPoolKey(
+async function addPoolKey(
   cakeFactory: Contract,
   config: PoolKeyConfig,
   signer: Signer
@@ -78,35 +76,28 @@ async function submitPoolKey(
     ? config.currency1 
     : config.currency0;
   
-  // Get token contracts for the function call
-  const token0 = await ethers.getContractAt("IERC20", token0Address);
-  const token1 = await ethers.getContractAt("IERC20", token1Address);
-
-  console.log("Submitting pool key for pair:");
+  console.log("Adding pool key for pair:");
   console.log(`  Token0: ${token0Address}`);
   console.log(`  Token1: ${token1Address}`);
   console.log(`  Fee: ${config.fee} (${config.fee / 10000}%)`);
   console.log(`  Tick Spacing: ${config.tickSpacing}`);
   console.log(`  Hooks: ${config.hooks || "None"}`);
 
-  // Note: The contract has a typo - parameter is named 'token' but should be 'token1'
-  // We'll use token1 for the second parameter
-  // Type assertion needed since storePoolKey exists in contract ABI but not in base type
-  const tx = await (cakeFactory.connect(signer) as unknown as {
-    storePoolKey: (
-      token0: Contract,
-      token1: Contract,
-      poolKey: ReturnType<typeof constructPoolKey>
-    ) => Promise<{ hash: string; wait: () => Promise<unknown> }>;
-  }).storePoolKey(token0, token1, poolKey);
+  // Call storePoolKey with addresses and PoolKey struct
+  const tx = await cakeFactory.connect(signer).storePoolKey(
+    token0Address,
+    token1Address,
+    poolKey
+  );
 
   console.log("  Transaction hash:", tx.hash);
-  await tx.wait();
-  console.log("  ✓ Pool key submitted successfully\n");
+  const receipt = await tx.wait();
+  console.log("  ✓ Pool key added successfully");
+  console.log(`  Gas used: ${receipt.gasUsed.toString()}\n`);
 }
 
 /**
- * Main function to submit pool keys
+ * Main function to add pool keys
  */
 async function main() {
   // Parse command line arguments
@@ -150,11 +141,26 @@ async function main() {
     } else {
       // Default example pool keys (can be modified)
       console.log("No pool keys provided. Using example configuration.");
-      console.log("Usage: npx hardhat run scripts/submitPoolKeys.ts --network <network> [config.json]");
-      console.log("   OR: npx hardhat run scripts/submitPoolKeys.ts --network <network> <cakeFactoryAddress> <token0> <token1> <fee> <tickSpacing> [hooks]");
+      console.log("\nUsage:");
+      console.log("  npx hardhat run scripts/addPoolKeys.ts --network <network> [config.json]");
+      console.log("  OR:");
+      console.log("  npx hardhat run scripts/addPoolKeys.ts --network <network> <cakeFactoryAddress> <token0> <token1> <fee> <tickSpacing> [hooks]");
       console.log("\nExample:");
-      console.log('  npx hardhat run scripts/submitPoolKeys.ts --network localhost \\');
+      console.log('  npx hardhat run scripts/addPoolKeys.ts --network localhost \\');
       console.log('    "0x1234..." "0xToken0" "0xToken1" 3000 60 "0x0000..."');
+      console.log("\nExample JSON config:");
+      console.log('  {');
+      console.log('    "cakeFactoryAddress": "0x...",');
+      console.log('    "poolKeys": [');
+      console.log('      {');
+      console.log('        "currency0": "0xToken0",');
+      console.log('        "currency1": "0xToken1",');
+      console.log('        "fee": 3000,');
+      console.log('        "tickSpacing": 60,');
+      console.log('        "hooks": "0x0000000000000000000000000000000000000000"');
+      console.log('      }');
+      console.log('    ]');
+      console.log('  }');
       return;
     }
   }
@@ -163,32 +169,44 @@ async function main() {
   const [signer] = await ethers.getSigners();
   console.log(`Using signer: ${signer.address}\n`);
 
-  // Get CakeFactory contract
+  // Verify signer is the owner
   const cakeFactory = await ethers.getContractAt(
     "CakeFactory",
     config.cakeFactoryAddress,
     signer
   );
 
-  console.log(`CakeFactory address: ${config.cakeFactoryAddress}`);
-  console.log(`Number of pool keys to submit: ${config.poolKeys.length}\n`);
+  const owner = await cakeFactory.owner();
+  if (signer.address.toLowerCase() !== owner.toLowerCase()) {
+    throw new Error(
+      `Signer ${signer.address} is not the owner. Owner is ${owner}. Only the owner can add pool keys.`
+    );
+  }
 
-  // Submit each pool key
+  console.log(`CakeFactory address: ${config.cakeFactoryAddress}`);
+  console.log(`Owner: ${owner}`);
+  console.log(`Number of pool keys to add: ${config.poolKeys.length}\n`);
+
+  // Add each pool key
   for (let i = 0; i < config.poolKeys.length; i++) {
     console.log(`[${i + 1}/${config.poolKeys.length}]`);
     try {
-      await submitPoolKey(cakeFactory, config.poolKeys[i], signer);
+      await addPoolKey(cakeFactory, config.poolKeys[i], signer);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`  ✗ Failed to submit pool key: ${errorMessage}`);
+      console.error(`  ✗ Failed to add pool key: ${errorMessage}`);
       if (error && typeof error === "object" && "reason" in error) {
         console.error(`  Reason: ${String(error.reason)}`);
       }
+      if (error && typeof error === "object" && "data" in error) {
+        console.error(`  Error data: ${String(error.data)}`);
+      }
       console.log();
+      throw error; // Re-throw to stop execution on error
     }
   }
 
-  console.log("Pool key submission complete!");
+  console.log("✓ All pool keys added successfully!");
 }
 
 // Execute main function
