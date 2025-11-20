@@ -146,4 +146,24 @@ export class IngredientsAPI {
       return { data: null, error: error as Error }
     }
   }
+
+  /**
+   * Get all non-settled ingredients (pending + submitted)
+   * These are expenses that should be included in balance calculations
+   */
+  async getNonSettledIngredients(cakeId: number): Promise<{ data: IngredientWithDetails[] | null; error: Error | null }> {
+    try {
+      const { data, error } = await this.supabase
+        .from('cake_ingredients')
+        .select('*')
+        .eq('cake_id', cakeId)
+        .in('status', ['pending', 'submitted'])
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      return { data: data as IngredientWithDetails[], error: null }
+    } catch (error) {
+      return { data: null, error: error as Error }
+    }
+  }
 }

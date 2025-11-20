@@ -18,7 +18,9 @@
     "deploy:ignition:sepolia": "hardhat ignition deploy ignition/modules/CakeFactory.js --network sepolia",
     "deploy:ignition:base-sepolia": "hardhat ignition deploy ignition/modules/CakeFactory.js --network baseSepolia",
     "node": "hardhat node",
-    "copy:abi": "mkdir -p ../frontend/public/contracts && cp artifacts/contracts/CakeFactory.sol/CakeFactory.json ../frontend/public/contracts/"
+    "copy:abi": "mkdir -p ../frontend/public/contracts && cp artifacts/contracts/CakeFactory.sol/CakeFactory.json ../frontend/public/contracts/",
+    "transfer:funds": "hardhat run scripts/transferFunds.js",
+    "transfer:funds:localhost": "hardhat run scripts/transferFunds.js --network localhost"
   },
   "keywords": [],
   "author": "",

@@ -79,11 +79,12 @@ export default function UserProfilePage({ params }: { params: { userId: string }
                 ? Number.parseFloat(cake.current_balances[memberIndex] || '0')
                 : 0
 
-              // Fetch pending ingredients for this cake
-              const { data: pendingIngredients } = await ingredientsAPI.getPendingIngredients(cake.id)
+              // Fetch non-settled ingredients (pending + submitted) for this cake
+              // These should be included in balance calculations
+              const { data: nonSettledIngredients } = await ingredientsAPI.getNonSettledIngredients(cake.id)
               
-              if (pendingIngredients && memberIndex >= 0) {
-                for (const ingredient of pendingIngredients) {
+              if (nonSettledIngredients && memberIndex >= 0) {
+                for (const ingredient of nonSettledIngredients) {
                   const amounts = ingredient.amounts || []
                   const totalAmount = amounts.reduce((sum, amt) => sum + Number.parseFloat(amt || '0'), 0)
                   
