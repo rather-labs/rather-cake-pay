@@ -58,6 +58,25 @@ $ forge clean
 $ forge build
 ```
 
+## Deployment
+
+1. Duplicate `.env.example` as `.env` inside this directory and fill in:
+   - `RPC_URL` / `PRIVATE_KEY` for your target network.
+   - `ROUTER_ADDRESS`, `POOL_MANAGER_ADDRESS`, `PERMIT2_ADDRESS` matching the Uniswap v4 contracts you want to use.
+2. Export the variables (or `source .env`).
+3. Run the deployment script:
+
+```shell
+$ source .env
+$ forge script script/DeployCakeFactory.s.sol \
+	--rpc-url $RPC_URL \
+	--broadcast \
+	--verify \
+	--etherscan-api-key $ETHERSCAN_API_KEY
+```
+
+> Replace the explorer API flag with `--verifier-url`/`--verifier` options if you deploy to a different network (e.g., BaseScan using `--etherscan-api-key $BASESCAN_API_KEY`).
+
 ### Anvil
 
 ```shell

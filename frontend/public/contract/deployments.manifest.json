@@ -1,0 +1,26 @@
+{
+  "localhost": {
+    "contractName": "CakeFactory",
+    "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "network": "localhost",
+    "chainId": 1337,
+    "explorerUrl": "http://localhost:8545",
+    "publicRpcUrl": "http://127.0.0.1:8545",
+    "blockNumber": 1,
+    "txHash": "0x7d4171bba9d117f08f78402299e1d21ae81194fe63e1f7a731ca60001fb0bb7f",
+    "generatedAt": "2025-11-19T20:46:35.042Z",
+    "abiFile": "CakeFactory.abi.json",
+    "integrations": {
+      "uniswap": {
+        "supported": false,
+        "routerAddress": "",
+        "envKey": "UNISWAP_ROUTER_ADDRESS_LOCALHOST"
+      },
+      "lemon": {
+        "supported": false,
+        "apiBaseUrl": "",
+        "envKey": "LEMON_API_URL_LOCALHOST"
+      }
+    }
+  }
+}

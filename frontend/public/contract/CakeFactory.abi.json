@@ -1,0 +1,693 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "AmountTooLarge",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      }
+    ],
+    "name": "CakeDoesNotExist",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      }
+    ],
+    "name": "CakeInactive",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "memberId",
+        "type": "uint64"
+      }
+    ],
+    "name": "DuplicateMember",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint64",
+        "name": "ingredientId",
+        "type": "uint64"
+      }
+    ],
+    "name": "IngredientDoesNotExist",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidBillingPeriod",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidMembers",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidWeights",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "memberId",
+        "type": "uint64"
+      }
+    ],
+    "name": "MemberNotRegistered",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "memberId",
+        "type": "uint64"
+      }
+    ],
+    "name": "NotMember",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      }
+    ],
+    "name": "NothingToCut",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint128",
+        "name": "batchedCakeIngredientsId",
+        "type": "uint128"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      }
+    ],
+    "name": "BatchedCakeIngredientsAdded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      }
+    ],
+    "name": "CakeCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      }
+    ],
+    "name": "CakeCutted",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint16[]",
+        "name": "weights",
+        "type": "uint16[]"
+      },
+      {
+        "internalType": "uint64[]",
+        "name": "payerIds",
+        "type": "uint64[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "payedAmounts",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "addBatchedCakeIngredients",
+    "outputs": [
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "name": "batchedIngredientsPerCake",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "createdAt",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "name": "cakeMemberIndex",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
+      }
+    ],
+    "name": "cakes",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "createdAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "lastCutAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "lastCutBatchedIngredientsId",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint128",
+        "name": "latestIngredientId",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint64",
+        "name": "billingPeriod",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "nextDueAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint16",
+        "name": "interestRate",
+        "type": "uint16"
+      },
+      {
+        "internalType": "bool",
+        "name": "active",
+        "type": "bool"
+      },
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "internalType": "uint64[]",
+        "name": "memberIds",
+        "type": "uint64[]"
+      },
+      {
+        "internalType": "uint16[]",
+        "name": "memberWeightsBps",
+        "type": "uint16[]"
+      },
+      {
+        "internalType": "uint16",
+        "name": "interestRate",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint64",
+        "name": "billingPeriod",
+        "type": "uint64"
+      }
+    ],
+    "name": "createCake",
+    "outputs": [
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "_cakeId",
+        "type": "uint128"
+      }
+    ],
+    "name": "cutCake",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      }
+    ],
+    "name": "getCakeDetails",
+    "outputs": [
+      {
+        "internalType": "uint64[]",
+        "name": "memberIds",
+        "type": "uint64[]"
+      },
+      {
+        "internalType": "int256[]",
+        "name": "currentBalances",
+        "type": "int256[]"
+      },
+      {
+        "internalType": "uint16",
+        "name": "interestRate",
+        "type": "uint16"
+      },
+      {
+        "internalType": "bool",
+        "name": "active",
+        "type": "bool"
+      },
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint64",
+        "name": "ingredientId",
+        "type": "uint64"
+      }
+    ],
+    "name": "getCakeIngredientDetails",
+    "outputs": [
+      {
+        "internalType": "uint16[]",
+        "name": "weights",
+        "type": "uint16[]"
+      },
+      {
+        "internalType": "uint64[]",
+        "name": "payerIds",
+        "type": "uint64[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "payedAmounts",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint64",
+        "name": "createdAt",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint64",
+        "name": "memberId",
+        "type": "uint64"
+      }
+    ],
+    "name": "getCakeMemberBalance",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      }
+    ],
+    "name": "getCakeMemberConfig",
+    "outputs": [
+      {
+        "internalType": "uint64[]",
+        "name": "memberIds",
+        "type": "uint64[]"
+      },
+      {
+        "internalType": "uint16[]",
+        "name": "memberWeights",
+        "type": "uint16[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      }
+    ],
+    "name": "getCakeMembers",
+    "outputs": [
+      {
+        "internalType": "uint64[]",
+        "name": "",
+        "type": "uint64[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "userId",
+        "type": "uint64"
+      }
+    ],
+    "name": "getUserAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "userId",
+        "type": "uint64"
+      }
+    ],
+    "name": "getUserCakes",
+    "outputs": [
+      {
+        "internalType": "uint128[]",
+        "name": "",
+        "type": "uint128[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "userAddress",
+        "type": "address"
+      }
+    ],
+    "name": "getUserId",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "cakeId",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint64",
+        "name": "memberId",
+        "type": "uint64"
+      }
+    ],
+    "name": "isMember",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "userAddress",
+        "type": "address"
+      }
+    ],
+    "name": "registerUser",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalBatchedCakeIngredients",
+    "outputs": [
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalCakes",
+    "outputs": [
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalUsers",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "name": "userAddresses",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
+      }
+    ],
+    "name": "userCakes",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "userIds",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
