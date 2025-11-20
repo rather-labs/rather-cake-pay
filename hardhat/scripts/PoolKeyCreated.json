@@ -1,0 +1,15 @@
+{
+  "network": "baseSepolia",
+  "chainId": "84532",
+  "tokenA": "0x9aE57D8AA9265E072074F8A370582470889C4637",
+  "tokenB": "0x99159A5d184003d5AC803736428d2F2AA4bE0CA8",
+  "poolKey": {
+    "currency0": "0x99159a5d184003d5ac803736428d2f2aa4be0ca8",
+    "currency1": "0x9ae57d8aa9265e072074f8a370582470889c4637",
+    "fee": 3000,
+    "tickSpacing": 60,
+    "hooks": "0x0000000000000000000000000000000000000000"
+  },
+  "transactionHash": "0xdcca4db09a356d6aca148d107f52d00fdaf3dfa347f6654c77642db37bc0e36b",
+  "createdAt": "2025-11-20T14:34:23.968Z"
+}

@@ -324,20 +324,31 @@ async function fetchAllPools(
     config.version === "v3" ? buildV3Query(config) : buildV4Query(config);
 
   try {
-    const response = await queryGraph<PoolV3 | PoolV4>(config.endpoint, query);
-
-    if (response.errors) {
-      console.error("❌ GraphQL errors:");
-      for (const error of response.errors) {
-        console.error(`   ${error.message}`);
+    if (config.version === "v3") {
+      const response = await queryGraph<PoolV3>(config.endpoint, query);
+      if (response.errors) {
+        console.error("❌ GraphQL errors:");
+        for (const error of response.errors) {
+          console.error(`   ${error.message}`);
+        }
+        throw new Error("GraphQL query failed");
       }
-      throw new Error("GraphQL query failed");
+      const pools = response.data.pools || [];
+      console.log(`✅ Found ${pools.length} pools`);
+      return pools as PoolV3[];
+    } else {
+      const response = await queryGraph<PoolV4>(config.endpoint, query);
+      if (response.errors) {
+        console.error("❌ GraphQL errors:");
+        for (const error of response.errors) {
+          console.error(`   ${error.message}`);
+        }
+        throw new Error("GraphQL query failed");
+      }
+      const pools = response.data.pools || [];
+      console.log(`✅ Found ${pools.length} pools`);
+      return pools as PoolV4[];
     }
-
-    const pools = response.data.pools || [];
-    console.log(`✅ Found ${pools.length} pools`);
-
-    return pools;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`❌ Error fetching pools: ${errorMsg}`);
@@ -474,24 +485,24 @@ async function main() {
     }
 
     // Filter by token if specified
-    let filteredPools = pools;
+    let filteredPools: PoolV3[] | PoolV4[] = pools;
     if (tokenArg) {
       const tokenLower = tokenArg.toLowerCase();
-      filteredPools = pools.filter((pool) => {
-        if (version === "v3") {
-          const p = pool as PoolV3;
+      if (version === "v3") {
+        filteredPools = (pools as PoolV3[]).filter((pool) => {
           return (
-            p.token0.id.toLowerCase() === tokenLower ||
-            p.token1.id.toLowerCase() === tokenLower
+            pool.token0.id.toLowerCase() === tokenLower ||
+            pool.token1.id.toLowerCase() === tokenLower
           );
-        } else {
-          const p = pool as PoolV4;
+        });
+      } else {
+        filteredPools = (pools as PoolV4[]).filter((pool) => {
           return (
-            p.currency0.id.toLowerCase() === tokenLower ||
-            p.currency1.id.toLowerCase() === tokenLower
+            pool.currency0.id.toLowerCase() === tokenLower ||
+            pool.currency1.id.toLowerCase() === tokenLower
           );
-        }
-      });
+        });
+      }
       console.log(
         `\n🔍 Filtered to ${filteredPools.length} pools containing token ${tokenArg}`
       );
@@ -501,12 +512,17 @@ async function main() {
     if (minLiquidityArg) {
       const minLiquidity = BigInt(minLiquidityArg);
       const beforeCount = filteredPools.length;
-      filteredPools = filteredPools.filter((pool) => {
-        const liquidity = BigInt(
-          (pool as PoolV3).liquidity || (pool as PoolV4).liquidity || "0"
-        );
-        return liquidity >= minLiquidity;
-      });
+      if (version === "v3") {
+        filteredPools = (filteredPools as PoolV3[]).filter((pool) => {
+          const liquidity = BigInt(pool.liquidity || "0");
+          return liquidity >= minLiquidity;
+        });
+      } else {
+        filteredPools = (filteredPools as PoolV4[]).filter((pool) => {
+          const liquidity = BigInt(pool.liquidity || "0");
+          return liquidity >= minLiquidity;
+        });
+      }
       console.log(
         `\n🔍 Filtered to ${filteredPools.length} pools with liquidity >= ${minLiquidityArg} (from ${beforeCount})`
       );
