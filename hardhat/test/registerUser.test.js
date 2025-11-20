@@ -3,20 +3,32 @@ const { ethers } = require("hardhat");
 
 
 describe("CakeFactory - registerUser", function () {
-    let CakeFactory, cakeFactory, owner, addr1, addr2;
+    let CakeFactory, cakeFactory;
+    let mockRouter, mockPoolManager, mockPermit2;
+    let owner, addr1, addr2;
 
 
     beforeEach(async function () {
-        // Deploy the CakeFactory contract
-        CakeFactory = await ethers.getContractFactory("CakeFactory");//contract factory
-        cakeFactory = await CakeFactory.deploy();//deploy contract
-        await cakeFactory.waitForDeployment();
-
-
         // Get signers
         [owner, addr1, addr2] = await ethers.getSigners();
-        console.log(addr1.address); // Prints the Ethereum address of addr1
-        console.log(addr2.address); // Prints the Ethereum address of addr2
+
+        // Deploy mock contracts
+        const MockRouterFactory = await ethers.getContractFactory("MockUniversalRouter");
+        const MockPoolManagerFactory = await ethers.getContractFactory("MockPoolManager");
+        const MockPermit2Factory = await ethers.getContractFactory("MockPermit2");
+
+        mockRouter = await MockRouterFactory.deploy();
+        mockPoolManager = await MockPoolManagerFactory.deploy();
+        mockPermit2 = await MockPermit2Factory.deploy();
+
+        // Deploy the CakeFactory contract
+        CakeFactory = await ethers.getContractFactory("CakeFactory");
+        cakeFactory = await CakeFactory.deploy(
+            await mockRouter.getAddress(),
+            await mockPoolManager.getAddress(),
+            await mockPermit2.getAddress()
+        );
+        await cakeFactory.waitForDeployment();
     });
 
 
