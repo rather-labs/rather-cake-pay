@@ -14,15 +14,19 @@ import { UsersAPI } from '@/lib/api/users';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
 import { formatAddress } from '@/lib/utils/format';
-import { Footer } from 'react-day-picker';
+import { Footer } from '@/components/Footer';
 import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory';
 import { lemonClient } from '@/lib/lemon/client';
 import { TransactionResult } from '@lemoncash/mini-app-sdk';
+import { useLemonWallet } from '@/hooks/use-lemon-wallet';
+import { useFarcasterWallet } from '@/hooks/use-farcaster-wallet';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { walletAddress, walletType } = useUserContext();
   const { status: accountStatus } = useAccount();
+  const lemon = useLemonWallet();
+  const farcaster = useFarcasterWallet();
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -94,12 +98,19 @@ export default function RegisterPage() {
   }, [completeRegistration, hash, isConfirmed]);
 
   // Wait for wagmi to be ready (status is not 'reconnecting' or initializing)
+  // Skip this check for Lemon/Farcaster as they don't use Wagmi
   useEffect(() => {
+    // For Lemon/Farcaster, mark wagmi as ready immediately
+    if (lemon.isLemonApp || farcaster.isInMiniApp) {
+      setWagmiReady(true);
+      return;
+    }
+
     // Wagmi is ready when status is 'connected' or 'disconnected' (not 'reconnecting' or undefined)
     if (accountStatus === 'connected' || accountStatus === 'disconnected') {
       setWagmiReady(true);
     }
-  }, [accountStatus]);
+  }, [accountStatus, lemon.isLemonApp, farcaster.isInMiniApp]);
 
   // Check if user is already registered and redirect to dashboard
   // Only run this check after wagmi is ready

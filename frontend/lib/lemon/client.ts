@@ -9,7 +9,7 @@ import {
   TokenName,
   type Address,
   type Permit,
-} from '@lemoncash/mini-app-sdk'
+} from '@lemoncash/mini-app-sdk';
 
 /**
  * Lemon Cash Mini App SDK Client
@@ -29,7 +29,7 @@ export const lemonClient = {
    * @returns true if running in Lemon Cash app, false otherwise
    */
   isLemonApp: () => {
-    return isWebView()
+    return isWebView();
   },
 
   /**
@@ -42,36 +42,36 @@ export const lemonClient = {
    * @returns Object containing wallet address, signature, and message
    */
   authenticate: async () => {
-    console.log('[lemonClient] authenticate() called')
-    console.log('[lemonClient] isWebView():', isWebView())
+    console.log('[lemonClient] authenticate() called');
+    console.log('[lemonClient] isWebView():', isWebView());
 
     if (!isWebView()) {
-      const error = new Error('Not in Lemon Cash WebView')
-      console.error('[lemonClient]', error)
-      throw error
+      const error = new Error('Not in Lemon Cash WebView');
+      console.error('[lemonClient]', error);
+      throw error;
     }
 
-    console.log('[lemonClient] Calling authenticate() from SDK...')
-    const result = await authenticate()
-    console.log('[lemonClient] SDK authenticate() result:', result)
+    console.log('[lemonClient] Calling authenticate() from SDK...');
+    const result = await authenticate();
+    console.log('[lemonClient] SDK authenticate() result:', result);
 
     if (result.result === TransactionResult.SUCCESS) {
-      console.log('[lemonClient] ✅ SUCCESS - wallet:', result.data.wallet)
+      console.log('[lemonClient] ✅ SUCCESS - wallet:', result.data.wallet);
       return {
         wallet: result.data.wallet,
         signature: result.data.signature,
         message: result.data.message,
-      }
+      };
     }
 
     if (result.result === TransactionResult.FAILED) {
-      const errorMsg = result.error?.message || 'Authentication failed'
-      console.error('[lemonClient] ❌ FAILED:', errorMsg, result.error)
-      throw new Error(errorMsg)
+      const errorMsg = result.error?.message || 'Authentication failed';
+      console.error('[lemonClient] ❌ FAILED:', errorMsg, result.error);
+      throw new Error(errorMsg);
     }
 
-    console.error('[lemonClient] ❌ CANCELLED by user')
-    throw new Error('Authentication cancelled by user')
+    console.error('[lemonClient] ❌ CANCELLED by user');
+    throw new Error('Authentication cancelled by user');
   },
 
   /**
@@ -85,7 +85,7 @@ export const lemonClient = {
    * @returns Transaction result
    */
   deposit: async (amount: string, tokenName: TokenName) => {
-    return await deposit({ amount, tokenName })
+    return await deposit({ amount, tokenName });
   },
 
   /**
@@ -96,7 +96,7 @@ export const lemonClient = {
    * @returns Transaction result
    */
   withdraw: async (amount: string, tokenName: TokenName) => {
-    return await withdraw({ amount, tokenName })
+    return await withdraw({ amount, tokenName });
   },
 
   /**
@@ -142,28 +142,30 @@ export const lemonClient = {
    * })
    */
   callContract: async (params: {
-    contractAddress: Address
-    functionName: string
-    args: unknown[]
-    value?: string
-    chainId: ChainId
-    permits?: Permit[]
+    contractAddress: Address;
+    functionName: string;
+    args: unknown[];
+    value?: string;
+    chainId: ChainId;
+    permits?: Permit[];
   }) => {
     return await callSmartContract({
-      contracts: [{
-        contractAddress: params.contractAddress,
-        functionName: params.functionName,
-        functionParams: params.args,
-        value: params.value || '0',
-        chainId: params.chainId,
-        permits: params.permits,
-      }]
-    })
+      contracts: [
+        {
+          contractAddress: params.contractAddress,
+          functionName: params.functionName,
+          functionParams: params.args,
+          value: params.value || '0',
+          chainId: params.chainId,
+          // permits: params.permits,
+        },
+      ],
+    });
   },
-}
+};
 
 /**
  * Type exports for better TypeScript support
  */
-export type LemonAuthResult = Awaited<ReturnType<typeof lemonClient.authenticate>>
-export type LemonTransactionResult = Awaited<ReturnType<typeof lemonClient.deposit>>
+export type LemonAuthResult = Awaited<ReturnType<typeof lemonClient.authenticate>>;
+export type LemonTransactionResult = Awaited<ReturnType<typeof lemonClient.deposit>>;

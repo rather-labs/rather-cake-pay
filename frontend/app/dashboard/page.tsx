@@ -17,9 +17,14 @@ import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory';
 import { lemonClient } from '@/lib/lemon/client';
 import { TransactionResult } from '@lemoncash/mini-app-sdk';
+import { useLemonWallet } from '@/hooks/use-lemon-wallet';
+import { useFarcasterWallet } from '@/hooks/use-farcaster-wallet';
+import { Header } from '@/components/Header';
 
 export default function Dashboard() {
-  const { walletAddress, walletType } = useUserContext();
+  const { walletAddress, walletType, isConnecting } = useUserContext();
+  const lemon = useLemonWallet();
+  const farcaster = useFarcasterWallet();
   const { user, loading: userLoading } = useCurrentUser();
   const { cakes, loading: cakesLoading, error, refresh } = useCakes(user?.id || 0);
 
@@ -371,31 +376,18 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#F0F9F4] to-[#FFF9E5]">
-      {/* Header */}
-      <header className="border-b-4 border-[#FFB6D9] bg-white/80 backdrop-blur sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="w-12 h-12 bg-[#FF69B4] pixel-art-shadow flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                🍰
-              </div>
-              <span className="text-2xl font-bold pixel-text text-[#FF69B4]">CakePay</span>
-            </Link>
-
-            <div className="flex items-center gap-4">
-              <ConnectButton />
-              {user && (
-                <div
-                  className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl cursor-pointer hover:scale-110 transition-transform"
-                  title={user.username || 'User'}
-                >
-                  👤
-                </div>
-              )}
+      <Header
+        userIcon={
+          user && (
+            <div
+              className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl cursor-pointer hover:scale-110 transition-transform"
+              title={user.username || 'User'}
+            >
+              👤
             </div>
-          </div>
-        </div>
-      </header>
+          )
+        }
+      />
 
       <div className="container mx-auto px-4 py-8">
         {/* Your Groups Section */}
@@ -422,18 +414,26 @@ export default function Dashboard() {
                 </p>
               </div>
             ) : !walletAddress ? (
-              <Card className="p-12 pixel-card bg-gradient-to-br from-[#FFB6D9]/20 to-[#B4E7CE]/20 border-4 border-dashed border-[#FFB6D9] text-center">
-                <div className="text-6xl mb-4">🔗</div>
-                <h3 className="text-xl font-bold pixel-text text-[#2D3748] mb-2">
-                  Connect Your Wallet
-                </h3>
-                <p className="text-[#4A5568] mb-6">
-                  Connect your wallet to start creating and managing groups!
-                </p>
-                <div className="flex justify-center">
-                  <ConnectButton />
-                </div>
-              </Card>
+              // Show loading if we're still detecting Lemon/Farcaster
+              (lemon.isLemonApp || farcaster.isInMiniApp) && isConnecting ? (
+                <Card className="p-12 pixel-card bg-white border-4 border-[#FFB6D9] text-center">
+                  <div className="text-4xl mb-4 animate-bounce">🍰</div>
+                  <p className="text-[#4A5568]">Connecting to {lemon.isLemonApp ? 'Lemon' : 'Farcaster'}...</p>
+                </Card>
+              ) : (
+                <Card className="p-12 pixel-card bg-gradient-to-br from-[#FFB6D9]/20 to-[#B4E7CE]/20 border-4 border-dashed border-[#FFB6D9] text-center">
+                  <div className="text-6xl mb-4">🔗</div>
+                  <h3 className="text-xl font-bold pixel-text text-[#2D3748] mb-2">
+                    Connect Your Wallet
+                  </h3>
+                  <p className="text-[#4A5568] mb-6">
+                    Connect your wallet to start creating and managing groups!
+                  </p>
+                  <div className="flex justify-center">
+                    <ConnectButton />
+                  </div>
+                </Card>
+              )
             ) : !user ? (
               <Card className="p-6 pixel-card bg-[#FF6B6B]/10 border-4 border-[#FF6B6B]">
                 <p className="text-[#FF6B6B]">Please register to continue.</p>

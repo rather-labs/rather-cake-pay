@@ -9,6 +9,7 @@ import { formatAddress } from '@/lib/utils/format'
 import { useAccount } from 'wagmi'
 import { createPublicClient, http, formatEther, type Address } from 'viem'
 import { sepolia } from 'viem/chains'
+import { lemonClient } from '@/lib/lemon/client'
 
 const sepoliaClient = createPublicClient({
   chain: sepolia,
@@ -29,6 +30,8 @@ export function WalletDebug() {
   const { chain } = useAccount()
   const [balanceStatus, setBalanceStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [balanceValue, setBalanceValue] = useState<string>('')
+  const [isTestingDeposit, setIsTestingDeposit] = useState(false)
+  const [depositResult, setDepositResult] = useState<string>('')
 
   // Only render after client-side mount to avoid hydration mismatch
   useEffect(() => {
@@ -158,6 +161,56 @@ export function WalletDebug() {
     return 'n/a'
   }
 
+  const handleTestDeposit = async () => {
+    if (!lemon.isLemonApp) {
+      setDepositResult('❌ Not in Lemon app')
+      return
+    }
+
+    if (!walletAddress) {
+      setDepositResult('❌ No wallet connected')
+      return
+    }
+
+    setIsTestingDeposit(true)
+    setDepositResult('🔄 Testing callContract...')
+
+    try {
+      console.log('[WalletDebug] Testing Lemon callContract function')
+
+      // Test with a simple USDC approve call on Sepolia
+      // USDC Sepolia: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+      const usdcSepoliaAddress = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'
+      const spender = '0x0000000000000000000000000000000000000001' // Burn address for testing
+      const amount = '1000000' // 1 USDC (6 decimals)
+
+      const result = await lemonClient.callContract({
+        contractAddress: usdcSepoliaAddress as Address,
+        functionName: 'approve',
+        args: [spender, amount],
+        chainId: 11155111, // Sepolia
+        value: '0',
+      })
+
+      console.log('[WalletDebug] callContract result:', result)
+
+      if (result.result === 'SUCCESS' && result.data?.txHash) {
+        setDepositResult(`✅ Success! TX: ${result.data.txHash.slice(0, 10)}...`)
+      } else if (result.result === 'CANCELLED') {
+        setDepositResult('⚠️ Transaction cancelled by user')
+      } else if (result.result === 'FAILED') {
+        setDepositResult(`❌ Failed: ${result.error?.message || 'Unknown error'}`)
+      } else {
+        setDepositResult('❌ Unexpected response')
+      }
+    } catch (error) {
+      console.error('[WalletDebug] callContract test error:', error)
+      setDepositResult(`❌ Error: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setIsTestingDeposit(false)
+    }
+  }
+
   return (
     <div className="fixed bottom-4 right-4 bg-black/90 text-white p-4 rounded-lg text-xs max-w-sm z-50 max-h-[80vh] overflow-y-auto">
       <div className="flex justify-between items-center mb-2">
@@ -210,16 +263,36 @@ export function WalletDebug() {
         </div>
 
         {walletType === WalletType.LEMON && (
-          <div className="mt-2 p-2 bg-green-700 rounded flex items-center gap-2">
-            <Image
-              src="/lemon-logo.svg"
-              alt="Lemon"
-              width={60}
-              height={16}
-              className="h-4 w-auto"
-            />
-            <span>Lemon Detected!</span>
-          </div>
+          <>
+            <div className="mt-2 p-2 bg-green-700 rounded flex items-center gap-2">
+              <Image
+                src="/lemon-logo.svg"
+                alt="Lemon"
+                width={60}
+                height={16}
+                className="h-4 w-auto"
+              />
+              <span>Lemon Detected!</span>
+            </div>
+
+            <div className="border-t border-gray-600 my-2 pt-2">
+              <button
+                onClick={handleTestDeposit}
+                disabled={isTestingDeposit}
+                className="w-full bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 px-3 py-2 rounded text-sm font-medium mb-2"
+              >
+                {isTestingDeposit ? '⏳ Testing...' : '🧪 Test callContract (USDC Approve)'}
+              </button>
+              {depositResult && (
+                <div className="text-[10px] text-gray-200 mt-1 p-2 bg-black/30 rounded">
+                  {depositResult}
+                </div>
+              )}
+              <div className="text-[10px] text-gray-400 mt-1">
+                Tests callContract with USDC approve on Sepolia
+              </div>
+            </div>
+          </>
         )}
         {walletType === WalletType.FARCASTER && (
           <div className="mt-2 p-2 bg-purple-700 rounded">
