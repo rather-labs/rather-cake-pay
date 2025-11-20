@@ -14,12 +14,7 @@ import { createCake } from '@/lib/actions/cakes';
 import { searchUsers } from '@/lib/actions/users';
 import type { User } from '@/types/database';
 import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
-
-import CakeFactoryArtifactAbi from '@/public/contracts/CakeFactory.json';
-
-export const CAKE_FACTORY_ABI = CakeFactoryArtifactAbi.abi;
-export const CONTRACT_ADDRESS_BASE_SEPOLIA = process.env
-  .NEXT_PUBLIC_CONTRACT_ADDRESS_BASE_SEPOLIA as `0x${string}`;
+import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_BASE_SEPOLIA } from '@/lib/contracts/cakeFactory';
 
 export default function Dashboard() {
   const { walletAddress } = useUserContext();

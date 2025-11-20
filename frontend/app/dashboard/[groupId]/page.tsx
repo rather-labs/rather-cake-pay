@@ -29,7 +29,7 @@ import { ICON_OPTIONS } from '@/lib/constants';
 import type { Cake, CakeIngredient, User } from '@/types/database';
 import { parseUnits } from 'viem';
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { CONTRACT_ADDRESS_BASE_SEPOLIA, CAKE_FACTORY_ABI } from '../page';
+import { CONTRACT_ADDRESS_BASE_SEPOLIA, CAKE_FACTORY_ABI } from '@/lib/contracts/cakeFactory';
 
 type MemberWithBalance = User & {
   balance: number;
@@ -997,12 +997,15 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                           {index === 2 && <Award className="w-6 h-6 text-[#CD7F32]" />}
                         </div>
 
-                        <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl group-hover:border-2 group-hover:border-[#FF69B4] transition-all">
+                        <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl group-hover:border-2 group-hover:border-[#FF69B4] transition-all overflow-hidden rounded">
                           {member.avatar_url ? (
-                            <img
+                            <Image
                               src={member.avatar_url}
                               alt={member.username}
-                              className="w-full h-full rounded"
+                              width={48}
+                              height={48}
+                              className="h-full w-full object-cover"
+                              unoptimized
                             />
                           ) : (
                             <span>{member.username.charAt(0).toUpperCase()}</span>

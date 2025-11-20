@@ -12,14 +12,10 @@ import { useUserContext } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
 import { UsersAPI } from '@/lib/api/users';
 import Link from 'next/link';
-import CakeFactoryArtifactAbi from '@/public/contracts/CakeFactory.json';
 import { Header } from '@/components/Header';
 import { formatAddress } from '@/lib/utils/format';
 import { Footer } from 'react-day-picker';
-
-export const CAKE_FACTORY_ABI = CakeFactoryArtifactAbi.abi;
-export const CONTRACT_ADDRESS_BASE_SEPOLIA = process.env
-  .NEXT_PUBLIC_CONTRACT_ADDRESS_BASE_SEPOLIA as `0x${string}`;
+import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_BASE_SEPOLIA } from '@/lib/contracts/cakeFactory';
 
 export default function RegisterPage() {
   const router = useRouter();
