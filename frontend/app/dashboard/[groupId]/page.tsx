@@ -36,7 +36,7 @@ import {
 import { useUserContext, WalletType } from '@/contexts/UserContext';
 import { lemonClient } from '@/lib/lemon/client';
 import { TransactionResult } from '@lemoncash/mini-app-sdk';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 type MemberWithBalance = User & {
   balance: number;
@@ -192,6 +192,25 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     fetchCakeData();
   }, [groupId, currentUser]);
 
+  const finalizeIngredientSubmission = useCallback(
+    async (txHash: string) => {
+        try {
+          const supabase = createClient();
+          const ingredientsAPI = new IngredientsAPI(supabase);
+          const pendingIngredients = expenses.filter((exp) => exp.status === 'pending');
+          for (const ingredient of pendingIngredients) {
+            await ingredientsAPI.markIngredientSubmitted(ingredient.id, txHash);
+           }
+        window.location.reload();
+      } catch (error) {
+        console.error('Error updating ingredient statuses:', error);
+        alert('Transaction confirmed but failed to update statuses. Please refresh the page.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [expenses]
+  );
   // Calculate totals and current user balance
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.totalAmount, 0);
 
