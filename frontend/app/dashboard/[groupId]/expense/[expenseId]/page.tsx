@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { ArrowLeft, Users, DollarSign, Calendar, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Users, DollarSign, Calendar, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
@@ -11,7 +11,6 @@ import { CakesAPI } from '@/lib/api/cakes'
 import { IngredientsAPI } from '@/lib/api/ingredients'
 import { UsersAPI } from '@/lib/api/users'
 import { useCurrentUser } from '@/hooks/use-current-user'
-import { ICON_OPTIONS } from '@/lib/constants'
 import type { Cake, CakeIngredient, User } from '@/types/database'
 
 type ParticipantWithWeight = {
@@ -149,13 +148,6 @@ export default function ExpenseDetailPage({ params }: { params: { groupId: strin
     fetchExpenseData()
   }, [groupId, expenseId, currentUser])
 
-  const getIconFromIndex = (index: number | null) => {
-    if (index === null || index < 0 || index >= ICON_OPTIONS.length) {
-      return ICON_OPTIONS[0]
-    }
-    return ICON_OPTIONS[index]
-  }
-
   // Check if custom weights were used (not all weights are equal to 1)
   const usesCustomWeights = expense?.weights && participants.length > 0
     ? !participants.every(p => p.weight === 1)
@@ -223,8 +215,6 @@ export default function ExpenseDetailPage({ params }: { params: { groupId: strin
       </div>
     )
   }
-
-  const cakeIcon = getIconFromIndex(cake.icon_index)
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#F0F9F4] to-[#FFF9E5]">
