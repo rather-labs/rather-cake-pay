@@ -27,7 +27,6 @@ export default function Dashboard() {
   const farcaster = useFarcasterWallet();
   const { user, loading: userLoading } = useCurrentUser();
   const { cakes, loading: cakesLoading, error, refresh } = useCakes(user?.id || 0);
-  const contractAddress = useContractAddress();
 
   const loading = userLoading || cakesLoading;
   const [showCreateModal, setShowCreateModal] = useState(false);
