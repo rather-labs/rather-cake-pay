@@ -3,9 +3,6 @@ import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import type { CakeFactory } from "../typechain-types";
 import type { MockERC20 } from "../typechain-types";
-import type { MockUniversalRouter } from "../typechain-types";
-import type { MockPoolManager } from "../typechain-types";
-import type { MockPermit2 } from "../typechain-types";
 
 describe("CakeFactory Payment Services", function () {
   // Fixture to deploy contracts and set up test environment
