@@ -12,15 +12,15 @@ import { createClient } from '@/lib/supabase/client';
 import { UsersAPI } from '@/lib/api/users';
 import Link from 'next/link';
 import CakeFactoryArtifactAbi from '@/public/contracts/CakeFactory.json';
+import { useContractAddress } from '@/hooks/use-contract-address';
 
 export const CAKE_FACTORY_ABI = CakeFactoryArtifactAbi.abi;
-export const CONTRACT_ADDRESS_BASE_SEPOLIA = process.env
-  .NEXT_PUBLIC_CONTRACT_ADDRESS_BASE_SEPOLIA as `0x${string}`;
 
 export default function RegisterPage() {
   const router = useRouter();
   const { walletAddress } = useUserContext();
   const { status: accountStatus } = useAccount();
+  const contractAddress = useContractAddress();
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -179,7 +179,7 @@ export default function RegisterPage() {
       console.log('Registering user on blockchain:', walletAddress);
 
       writeContract({
-        address: CONTRACT_ADDRESS_BASE_SEPOLIA,
+        address: contractAddress,
         abi: CAKE_FACTORY_ABI,
         functionName: 'registerUser',
         args: [walletAddress as `0x${string}`],

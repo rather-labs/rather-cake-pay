@@ -30,10 +30,9 @@ import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 
 import CakeFactoryArtifactAbi from '@/public/contracts/CakeFactory.json';
 import { parseUnits } from 'viem';
+import { useContractAddress } from '@/hooks/use-contract-address';
 
 export const CAKE_FACTORY_ABI = CakeFactoryArtifactAbi.abi;
-export const CONTRACT_ADDRESS_BASE_SEPOLIA = process.env
-  .NEXT_PUBLIC_CONTRACT_ADDRESS_BASE_SEPOLIA as `0x${string}`;
 
 type MemberWithBalance = User & {
   balance: number;
@@ -48,6 +47,7 @@ type ExpenseWithDetails = CakeIngredient & {
 export default function GroupDetailPage({ params }: { params: { groupId: string } }) {
   const { groupId } = params;
   const { user: currentUser } = useCurrentUser();
+  const contractAddress = useContractAddress();
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -202,10 +202,11 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     // Start with on-chain balance
     let balance = Number.parseFloat(cake.current_balances?.[memberIndex] || '0');
 
-    // Add contributions from pending ingredients
+    // Add contributions from non-settled ingredients (pending + submitted)
     // Balance convention: positive = you are owed, negative = you owe
-    const pendingExpenses = expenses.filter((exp) => exp.status === 'pending');
-    for (const expense of pendingExpenses) {
+    // Only include expenses that haven't been settled (pending or submitted)
+    const nonSettledExpenses = expenses.filter((exp) => exp.status === 'pending' || exp.status === 'submitted');
+    for (const expense of nonSettledExpenses) {
       if (expense.weights && expense.weights[memberIndex] > 0) {
         const totalWeight = expense.weights.reduce((sum, w) => sum + (w || 0), 0);
         const userWeight = expense.weights[memberIndex] || 0;
@@ -226,8 +227,11 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     return balance;
   })();
 
-  // Count pending ingredients (not yet submitted on-chain)
+  // Count pending ingredients (not yet submitted on-chain) - for UI widget
   const pendingIngredientsCount = expenses.filter((exp) => exp.status === 'pending').length;
+  
+  // Count non-settled ingredients (pending + submitted, not yet settled) - for balance calculations
+  const nonSettledIngredientsCount = expenses.filter((exp) => exp.status === 'pending' || exp.status === 'submitted').length;
 
   // Calculate complete balances for all members (including pending ingredients)
   const membersWithCompleteBalances = members.map((member) => {
@@ -239,10 +243,11 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     // Start with on-chain balance
     let balance = Number.parseFloat(cake.current_balances?.[memberIndex] || '0');
 
-    // Add contributions from pending ingredients
+    // Add contributions from non-settled ingredients (pending + submitted)
     // Balance convention: positive = you are owed, negative = you owe
-    const pendingExpenses = expenses.filter((exp) => exp.status === 'pending');
-    for (const expense of pendingExpenses) {
+    // Only include expenses that haven't been settled (pending or submitted)
+    const nonSettledExpenses = expenses.filter((exp) => exp.status === 'pending' || exp.status === 'submitted');
+    for (const expense of nonSettledExpenses) {
       if (expense.weights && expense.weights[memberIndex] > 0) {
         const totalWeight = expense.weights.reduce((sum, w) => sum + (w || 0), 0);
         const userWeight = expense.weights[memberIndex] || 0;
@@ -277,12 +282,13 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
   });
 
   const handleSubmitIngredients = async () => {
-    if (pendingIngredientsCount === 0) {
+    if (nonSettledIngredientsCount === 0) {
       return;
     }
 
     setIsSubmitting(true);
     try {
+      // Only submit pending ingredients (not yet submitted on-chain)
       const pendingIngredients = expenses.filter((exp) => exp.status === 'pending');
 
       if (!cake || !cake.member_ids) {
@@ -298,12 +304,24 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
           ing.weights?.every((w, i) => w === firstIngredientWeights[i])
       );
 
-      // Prepare the weights array (in BPS - basis points)
+      // Prepare the weights array (in BPS - basis points, must sum to 10000)
       // If all weights match, send once; otherwise send empty array to use default
-      const weights: number[] =
-        allWeightsMatch && firstIngredientWeights.length > 0
-          ? firstIngredientWeights.map((w) => Math.floor(w * 10000)) // Convert to BPS
-          : []; // Empty array means use default cake weights
+      let weights: number[] = [];
+      if (allWeightsMatch && firstIngredientWeights.length > 0) {
+        // Weights are already stored in BPS format (0-10000) in the database
+        weights = firstIngredientWeights.map((w) => Math.floor(w));
+        
+        // Validate that weights sum to 10000
+        const weightSum = weights.reduce((sum, w) => sum + w, 0);
+        if (weightSum !== 10000) {
+          throw new Error(
+            `Weights must sum to 10000 (100%). Current sum: ${weightSum}. Please ensure all expenses have weights that sum to exactly 10000.`
+          );
+        }
+      } else {
+        // Empty array means use default cake weights
+        weights = [];
+      }
 
       // Aggregate payer IDs and amounts
       const allPayerIds: bigint[] = [];
@@ -325,8 +343,10 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
       }
 
       // Call the smart contract
+      // Note: writeContract doesn't return a promise in wagmi v2
+      // Errors are handled via writeError state, user rejection is also handled there
       writeContract({
-        address: CONTRACT_ADDRESS_BASE_SEPOLIA,
+        address: contractAddress,
         abi: CAKE_FACTORY_ABI,
         functionName: 'addBatchedCakeIngredients',
         args: [
@@ -336,6 +356,8 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
           allAmounts, // payedAmounts as uint256[]
         ],
       });
+      // After calling writeContract, isSubmitting will remain true
+      // It will be reset when hash is received (transaction submitted) or on error
     } catch (error) {
       console.error('Error preparing transaction:', error);
       alert('Failed to prepare transaction. Please try again.');
@@ -343,6 +365,7 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     }
   };
 
+  // Handle transaction errors
   useEffect(() => {
     if (writeError) {
       console.error('Transaction error:', writeError);
@@ -351,13 +374,33 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     }
   }, [writeError]);
 
+  // Reset submitting state when transaction hash is received (after MetaMask approval)
+  // This prevents the UI from appearing frozen after user approves the transaction
+  // The transaction is now submitted and we're waiting for confirmation (handled by isConfirming)
+  useEffect(() => {
+    if (hash && !isWriting) {
+      // Transaction was successfully submitted to the network
+      // Reset isSubmitting so the UI can show the correct "Confirming on Blockchain..." state
+      // isSubmitting will be set to true again when we start updating the database
+      setIsSubmitting(false);
+    }
+  }, [hash, isWriting]);
+
+  // Handle transaction confirmation and update database
   useEffect(() => {
     if (isConfirmed && hash) {
       const updateIngredientStatuses = async () => {
+        // Set isSubmitting to true to show "Updating Database..." state
+        setIsSubmitting(true);
         try {
           const supabase = createClient();
           const ingredientsAPI = new IngredientsAPI(supabase);
-          const pendingIngredients = expenses.filter((exp) => exp.status === 'pending');
+          // Get fresh pending ingredients at confirmation time to avoid stale data
+          const { data: ingredientsData } = await ingredientsAPI.getCakeIngredients(
+            Number.parseInt(groupId, 10)
+          );
+          const pendingIngredients =
+            ingredientsData?.filter((ing) => ing.status === 'pending') || [];
 
           // Update all pending ingredients to 'submitted' status
           for (const ingredient of pendingIngredients) {
@@ -369,14 +412,13 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
         } catch (error) {
           console.error('Error updating ingredient statuses:', error);
           alert('Transaction confirmed but failed to update statuses. Please refresh the page.');
-        } finally {
           setIsSubmitting(false);
         }
       };
 
       updateIngredientStatuses();
     }
-  }, [isConfirmed, hash, expenses]);
+  }, [isConfirmed, hash, groupId]);
 
   const getCategoryIcon = () => {
     // Default to Utensils icon for expenses
@@ -572,38 +614,86 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
         }
       }
 
-      // Calculate weights (in order of cake.member_ids)
+      // Calculate weights (in order of cake.member_ids) - must sum to 10000 (BPS)
+      const BPS_DENOMINATOR = 10000;
       const weights: number[] = [];
+      const rawWeights: number[] = [];
 
       if (newExpense.useCustomWeights) {
-        // Use custom weights
-        const totalWeight = newExpense.splitBetween.reduce((sum, id) => {
-          return sum + (newExpense.weights[id] || 0);
-        }, 0);
+        // Use custom weights - collect raw weights
+        for (const memberId of memberIds) {
+          const memberIdStr = memberId.toString();
+          if (newExpense.splitBetween.includes(memberIdStr)) {
+            const weight = newExpense.weights[memberIdStr] || 0;
+            if (weight <= 0) {
+              alert('All weights must be greater than 0');
+              return;
+            }
+            rawWeights.push(weight);
+          } else {
+            rawWeights.push(0);
+          }
+        }
 
-        if (totalWeight === 0) {
+        // Calculate total of raw weights
+        const totalRawWeight = rawWeights.reduce((sum, w) => sum + w, 0);
+        if (totalRawWeight === 0) {
           alert('Total weight must be greater than 0');
           return;
         }
 
-        for (const memberId of memberIds) {
-          const memberIdStr = memberId.toString();
-          if (newExpense.splitBetween.includes(memberIdStr)) {
-            weights.push(newExpense.weights[memberIdStr] || 0);
+        // Normalize to BPS (sum to 10000)
+        let totalBPS = 0;
+        for (let i = 0; i < rawWeights.length; i++) {
+          if (rawWeights[i] > 0) {
+            // Calculate BPS: (rawWeight / totalRawWeight) * 10000
+            const bps = Math.round((rawWeights[i] / totalRawWeight) * BPS_DENOMINATOR);
+            weights.push(bps);
+            totalBPS += bps;
           } else {
             weights.push(0);
+          }
+        }
+
+        // Adjust for rounding errors - add/subtract difference to last non-zero weight
+        const difference = BPS_DENOMINATOR - totalBPS;
+        if (difference !== 0) {
+          for (let i = weights.length - 1; i >= 0; i--) {
+            if (weights[i] > 0) {
+              weights[i] += difference;
+              break;
+            }
           }
         }
       } else {
-        // Equal weights
+        // Equal weights - distribute 10000 equally among participants
+        const participantCount = newExpense.splitBetween.length;
+        if (participantCount === 0) {
+          alert('At least one person must be included in the split');
+          return;
+        }
+
+        const equalWeightBPS = Math.floor(BPS_DENOMINATOR / participantCount);
+        let remainingBPS = BPS_DENOMINATOR - (equalWeightBPS * participantCount);
+
         for (const memberId of memberIds) {
           const memberIdStr = memberId.toString();
           if (newExpense.splitBetween.includes(memberIdStr)) {
-            weights.push(1);
+            // Add any remainder to the first participant
+            const weight = equalWeightBPS + (remainingBPS > 0 ? 1 : 0);
+            weights.push(weight);
+            if (remainingBPS > 0) remainingBPS--;
           } else {
             weights.push(0);
           }
         }
+      }
+
+      // Validate that weights sum to exactly 10000
+      const weightSum = weights.reduce((sum, w) => sum + w, 0);
+      if (weightSum !== BPS_DENOMINATOR) {
+        alert(`Weights must sum to 10000 (100%). Current sum: ${weightSum}`);
+        return;
       }
 
       // Prepare ingredient data
@@ -1496,36 +1586,65 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                   {newExpense.useCustomWeights && newExpense.splitBetween.length > 0 && (
                     <div className="space-y-2 p-3 bg-[#B4E7CE]/10 rounded border-2 border-[#B4E7CE]">
                       <div className="block text-xs font-bold pixel-text text-[#2D3748] mb-2">
-                        Weight per person (higher weight = pays more)
+                        Weight per person (relative weights - will be normalized to sum to 100%)
                       </div>
-                      {newExpense.splitBetween.map((memberId) => {
-                        const member = members.find((m) => m.id.toString() === memberId);
-                        if (!member) return null;
-                        return (
-                          <div key={memberId} className="flex items-center gap-2">
-                            <span className="text-sm text-[#4A5568] w-24 truncate">
-                              {member.username}:
-                            </span>
-                            <input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              value={newExpense.weights[memberId] || 1}
-                              onChange={(e) => {
-                                const value = Number.parseFloat(e.target.value) || 0;
-                                setNewExpense((prev) => ({
-                                  ...prev,
-                                  weights: {
-                                    ...prev.weights,
-                                    [memberId]: value,
-                                  },
-                                }));
-                              }}
-                              className="w-full px-2 py-1.5 text-sm border-2 border-[#E9D5FF] rounded focus:border-[#5DD39E] outline-none transition-colors"
-                            />
-                          </div>
+                      {(() => {
+                        // Calculate total weight once for all members
+                        const totalWeight = newExpense.splitBetween.reduce(
+                          (sum, id) => sum + (newExpense.weights[id] || 0),
+                          0
                         );
-                      })}
+                        
+                        return (
+                          <>
+                            {newExpense.splitBetween.map((memberId) => {
+                              const member = members.find((m) => m.id.toString() === memberId);
+                              if (!member) return null;
+                              
+                              // Calculate percentage for display
+                              const currentWeight = newExpense.weights[memberId] || 0;
+                              const percentage = totalWeight > 0 
+                                ? ((currentWeight / totalWeight) * 100).toFixed(2)
+                                : '0.00';
+                              
+                              return (
+                                <div key={memberId} className="flex items-center gap-2">
+                                  <span className="text-sm text-[#4A5568] w-24 truncate">
+                                    {member.username}:
+                                  </span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    value={newExpense.weights[memberId] || 1}
+                                    onChange={(e) => {
+                                      const value = Number.parseFloat(e.target.value) || 0;
+                                      if (value <= 0) {
+                                        alert('Weight must be greater than 0');
+                                        return;
+                                      }
+                                      setNewExpense((prev) => ({
+                                        ...prev,
+                                        weights: {
+                                          ...prev.weights,
+                                          [memberId]: value,
+                                        },
+                                      }));
+                                    }}
+                                    className="w-full px-2 py-1.5 text-sm border-2 border-[#E9D5FF] rounded focus:border-[#5DD39E] outline-none transition-colors"
+                                  />
+                                  <span className="text-xs text-[#4A5568] w-16 text-right">
+                                    {percentage}%
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            <div className="text-xs text-[#4A5568] mt-2 pt-2 border-t border-[#B4E7CE]">
+                              Total: {totalWeight > 0 ? '100.00%' : '0.00%'} (normalized to 10000 BPS)
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>

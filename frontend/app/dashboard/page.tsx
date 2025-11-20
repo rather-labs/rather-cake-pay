@@ -16,15 +16,15 @@ import type { User } from '@/types/database';
 import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 
 import CakeFactoryArtifactAbi from '@/public/contracts/CakeFactory.json';
+import { useContractAddress } from '@/hooks/use-contract-address';
 
 export const CAKE_FACTORY_ABI = CakeFactoryArtifactAbi.abi;
-export const CONTRACT_ADDRESS_BASE_SEPOLIA = process.env
-  .NEXT_PUBLIC_CONTRACT_ADDRESS_BASE_SEPOLIA as `0x${string}`;
 
 export default function Dashboard() {
   const { walletAddress } = useUserContext();
   const { user, loading: userLoading } = useCurrentUser();
   const { cakes, loading: cakesLoading, error, refresh } = useCakes(user?.id || 0);
+  const contractAddress = useContractAddress();
 
   const loading = userLoading || cakesLoading;
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -313,7 +313,7 @@ export default function Dashboard() {
 
       // Call the smart contract with correct parameter order
       writeContract({
-        address: CONTRACT_ADDRESS_BASE_SEPOLIA,
+        address: contractAddress,
         abi: CAKE_FACTORY_ABI,
         functionName: 'createCake',
         args: [
