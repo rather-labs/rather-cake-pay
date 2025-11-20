@@ -4,7 +4,7 @@
   "description": "Hardhat project for Rather Cake Pay smart contracts",
   "main": "index.js",
   "scripts": {
-    "compile": "hardhat compile",
+    "compile": "hardhat compile && npm run copy:abi",
     "test": "hardhat test",
     "lint": "solhint 'contracts/**/*.sol'",
     "format": "prettier --write 'contracts/**/*.sol'",
@@ -13,8 +13,12 @@
     "deploy:localhost": "hardhat run scripts/deploy.js --network localhost",
     "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
     "deploy:base-sepolia": "hardhat run scripts/deploy.js --network baseSepolia",
-    "deploy:local": "hardhat ignition deploy ignition/modules/CakeFactory.js --network localhost",
-    "node": "hardhat node"
+    "deploy:ignition": "hardhat ignition deploy ignition/modules/CakeFactory.js",
+    "deploy:ignition:localhost": "hardhat ignition deploy ignition/modules/CakeFactory.js --network localhost",
+    "deploy:ignition:sepolia": "hardhat ignition deploy ignition/modules/CakeFactory.js --network sepolia",
+    "deploy:ignition:base-sepolia": "hardhat ignition deploy ignition/modules/CakeFactory.js --network baseSepolia",
+    "node": "hardhat node",
+    "copy:abi": "mkdir -p ../frontend/public/contracts && cp artifacts/contracts/CakeFactory.sol/CakeFactory.json ../frontend/public/contracts/"
   },
   "keywords": [],
   "author": "",
