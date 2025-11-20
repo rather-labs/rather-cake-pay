@@ -1,6 +1,7 @@
 require("dotenv").config();
 require("@nomicfoundation/hardhat-toolbox");
 require("@nomicfoundation/hardhat-ignition");
+require("hardhat-preprocessor");
 
 const {
   SEPOLIA_RPC_URL,
@@ -17,12 +18,101 @@ const withAccounts = (privateKey) =>
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
-    version: "0.8.24",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
+    compilers: [
+      {
+        version: "0.8.20",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+          evmVersion: "cancun",
+        },
       },
+      {
+        version: "0.8.24",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+          evmVersion: "cancun",
+          viaIR: true,
+        },
+      },
+      {
+        version: "0.8.26",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+          evmVersion: "cancun",
+          viaIR: true,
+        },
+      },
+    ],
+    overrides: {
+      "@uniswap/v3-periphery/contracts/libraries/PoolAddress.sol": {
+        version: "0.8.20",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+    },
+  },
+  preprocess: {
+    eachLine: (hre) => {
+      // Track state across lines for multi-line address(uint256(...)) patterns
+      const state = { inAddressUint256: false, pendingClose: false };
+      return {
+        transform: (line) => {
+          let transformedLine = line;
+          
+          // Detect start of address(uint256(...)) pattern
+          if (transformedLine.includes("address(") && !transformedLine.includes("uint160")) {
+            state.inAddressUint256 = true;
+            state.pendingClose = false;
+          }
+          
+          // Transform uint256( to uint160(uint256( when inside address(...)
+          if (state.inAddressUint256 && /^\s+uint256\(/.test(transformedLine) && !transformedLine.includes("uint160")) {
+            transformedLine = transformedLine.replace(/\buint256\(/g, "uint160(uint256(");
+            state.pendingClose = true;
+          }
+          
+          // Add extra closing parenthesis when closing uint256 inside address(uint160(uint256(...)))
+          if (state.pendingClose && /^\s+\)\s*$/.test(transformedLine) && !transformedLine.includes("))")) {
+            transformedLine = transformedLine.replace(/^\s+\)\s*$/, "            ))");
+            state.pendingClose = false;
+          }
+          
+          // Reset state when we see the final closing of address()
+          if (state.inAddressUint256 && /^\s+\)\s*;?\s*$/.test(transformedLine) && !state.pendingClose) {
+            state.inAddressUint256 = false;
+          }
+          
+          // Rewrite permit2 imports to @uniswap/permit2 (preserve original quote style)
+          if (transformedLine.includes("permit2/") && !transformedLine.includes("@uniswap/permit2/")) {
+            transformedLine = transformedLine.replace(/from ['"]permit2\//g, (match) => {
+              const quote = match.includes("'") ? "'" : '"';
+              return `from ${quote}@uniswap/permit2/`;
+            });
+          }
+          // Rewrite ERC721 extension imports to use extensions subdirectory
+          if (transformedLine.includes("@openzeppelin/contracts/token/ERC721/IERC721")) {
+            transformedLine = transformedLine.replace(
+              /@openzeppelin\/contracts\/token\/ERC721\/(IERC721(?:Metadata|Enumerable))\.sol/g,
+              "@openzeppelin/contracts/token/ERC721/extensions/$1.sol"
+            );
+          }
+          return transformedLine;
+        },
+        settings: { strip: false },
+      };
     },
   },
   networks: {
