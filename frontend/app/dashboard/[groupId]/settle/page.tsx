@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { createClient } from '@/lib/supabase/client'
@@ -281,9 +282,16 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-xl">
+                                <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-xl overflow-hidden rounded">
                                   {member.avatar_url ? (
-                                    <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                                    <Image
+                                      src={member.avatar_url}
+                                      alt={member.username}
+                                      width={48}
+                                      height={48}
+                                      className="h-full w-full object-cover"
+                                      unoptimized
+                                    />
                                   ) : (
                                     <span>{member.username.charAt(0).toUpperCase()}</span>
                                   )}
@@ -328,9 +336,16 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl">
+                                <div className="w-12 h-12 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl overflow-hidden rounded">
                                   {member.avatar_url ? (
-                                    <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                                    <Image
+                                      src={member.avatar_url}
+                                      alt={member.username}
+                                      width={48}
+                                      height={48}
+                                      className="h-full w-full object-cover"
+                                      unoptimized
+                                    />
                                   ) : (
                                     <span>{member.username.charAt(0).toUpperCase()}</span>
                                   )}
@@ -388,9 +403,16 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
                   <div key={obligation.user.id} className="mb-6">
                     <div className="flex items-center justify-between gap-4 mb-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-16 h-16 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl">
+                        <div className="w-16 h-16 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl overflow-hidden rounded">
                           {currentUser?.avatar_url ? (
-                            <img src={currentUser.avatar_url} alt={currentUser.username} className="w-full h-full rounded" />
+                            <Image
+                              src={currentUser.avatar_url}
+                              alt={currentUser.username}
+                              width={64}
+                              height={64}
+                              className="h-full w-full object-cover"
+                              unoptimized
+                            />
                           ) : (
                             <span>{currentUser?.username.charAt(0).toUpperCase() || '👤'}</span>
                           )}
@@ -413,9 +435,16 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <div className="w-16 h-16 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl">
+                        <div className="w-16 h-16 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl overflow-hidden rounded">
                           {obligation.user.avatar_url ? (
-                            <img src={obligation.user.avatar_url} alt={obligation.user.username} className="w-full h-full rounded" />
+                            <Image
+                              src={obligation.user.avatar_url}
+                              alt={obligation.user.username}
+                              width={64}
+                              height={64}
+                              className="h-full w-full object-cover"
+                              unoptimized
+                            />
                           ) : (
                             <span>{obligation.user.username.charAt(0).toUpperCase()}</span>
                           )}
@@ -459,9 +488,16 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
                   <div key={obligation.user.id} className="mb-6">
                     <div className="flex items-center justify-between gap-4 mb-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-16 h-16 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl">
+                        <div className="w-16 h-16 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl overflow-hidden rounded">
                           {obligation.user.avatar_url ? (
-                            <img src={obligation.user.avatar_url} alt={obligation.user.username} className="w-full h-full rounded" />
+                            <Image
+                              src={obligation.user.avatar_url}
+                              alt={obligation.user.username}
+                              width={64}
+                              height={64}
+                              className="h-full w-full object-cover"
+                              unoptimized
+                            />
                           ) : (
                             <span>{obligation.user.username.charAt(0).toUpperCase()}</span>
                           )}
@@ -484,9 +520,16 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <div className="w-16 h-16 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl">
+                        <div className="w-16 h-16 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl overflow-hidden rounded">
                           {currentUser?.avatar_url ? (
-                            <img src={currentUser.avatar_url} alt={currentUser.username} className="w-full h-full rounded" />
+                            <Image
+                              src={currentUser.avatar_url}
+                              alt={currentUser.username}
+                              width={64}
+                              height={64}
+                              className="h-full w-full object-cover"
+                              unoptimized
+                            />
                           ) : (
                             <span>{currentUser?.username.charAt(0).toUpperCase() || '👤'}</span>
                           )}

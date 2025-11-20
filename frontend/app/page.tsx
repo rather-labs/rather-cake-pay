@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import Image from 'next/image'
 import { useEffect, useState } from 'react'
 
 export default function Home() {
@@ -117,10 +118,12 @@ export default function Home() {
             {/* Feature 1 */}
             <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-4 border-[#FFB6D9] hover:border-[#FF69B4] transition-all hover:-translate-y-2 hover:shadow-2xl">
               <div className="mb-6 flex justify-center">
-                <img 
-                  src="/pixel-art-icon-of-multiple-colorful-cryptocurrency.jpg" 
+                <Image
+                  src="/pixel-art-icon-of-multiple-colorful-cryptocurrency.jpg"
                   alt="Multiple crypto coins"
-                  className="w-24 h-24 pixel-art-filter"
+                  width={96}
+                  height={96}
+                  className="pixel-art-filter"
                 />
               </div>
               <h3 className="text-2xl font-bold mb-4 text-[#FF69B4] pixel-text text-center">Pay Your Way</h3>
@@ -130,10 +133,12 @@ export default function Home() {
             {/* Feature 2 */}
             <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-4 border-[#B4E7CE] hover:border-[#5DD39E] transition-all hover:-translate-y-2 hover:shadow-2xl">
               <div className="mb-6 flex justify-center">
-                <img 
-                  src="/pixel-art-icon-of-lightning-bolt-or-speed-lines-re.jpg" 
+                <Image
+                  src="/pixel-art-icon-of-lightning-bolt-or-speed-lines-re.jpg"
                   alt="Zero friction"
-                  className="w-24 h-24 pixel-art-filter"
+                  width={96}
+                  height={96}
+                  className="pixel-art-filter"
                 />
               </div>
               <h3 className="text-2xl font-bold mb-4 text-[#5DD39E] pixel-text text-center">Zero Friction</h3>
@@ -143,10 +148,12 @@ export default function Home() {
             {/* Feature 3 */}
             <Card className="p-8 pixel-card bg-white/80 backdrop-blur border-4 border-[#E9D5FF] hover:border-[#C084FC] transition-all hover:-translate-y-2 hover:shadow-2xl">
               <div className="mb-6 flex justify-center">
-                <img 
-                  src="/pixel-art-icon-of-trophy-with-star-and-leaderboard.jpg" 
+                <Image
+                  src="/pixel-art-icon-of-trophy-with-star-and-leaderboard.jpg"
                   alt="Make it fun"
-                  className="w-24 h-24 pixel-art-filter"
+                  width={96}
+                  height={96}
+                  className="pixel-art-filter"
                 />
               </div>
               <h3 className="text-2xl font-bold mb-4 text-[#C084FC] pixel-text text-center">Make It Fun</h3>
@@ -168,10 +175,12 @@ export default function Home() {
             <div className="text-center group">
               <div className="mb-6 flex justify-center">
                 <div className="relative">
-                  <img 
-                    src="/pixel-art-of-group-of-people-with-cake-icon-repres.jpg" 
+                  <Image
+                    src="/pixel-art-of-group-of-people-with-cake-icon-repres.jpg"
                     alt="Create a group"
-                    className="w-32 h-32 pixel-art-filter group-hover:scale-110 transition-transform"
+                    width={128}
+                    height={128}
+                    className="pixel-art-filter group-hover:scale-110 transition-transform"
                   />
                   <div className="absolute -top-2 -right-2 w-8 h-8 bg-[#FF69B4] text-white rounded-full flex items-center justify-center font-bold pixel-text">1</div>
                 </div>
@@ -184,10 +193,12 @@ export default function Home() {
             <div className="text-center group">
               <div className="mb-6 flex justify-center">
                 <div className="relative">
-                  <img 
-                    src="/pixel-art-of-receipt-or-bill-with-items-listed-on-.jpg" 
+                  <Image
+                    src="/pixel-art-of-receipt-or-bill-with-items-listed-on-.jpg"
                     alt="Add expenses"
-                    className="w-32 h-32 pixel-art-filter group-hover:scale-110 transition-transform"
+                    width={128}
+                    height={128}
+                    className="pixel-art-filter group-hover:scale-110 transition-transform"
                   />
                   <div className="absolute -top-2 -right-2 w-8 h-8 bg-[#5DD39E] text-white rounded-full flex items-center justify-center font-bold pixel-text">2</div>
                 </div>
@@ -200,10 +211,12 @@ export default function Home() {
             <div className="text-center group">
               <div className="mb-6 flex justify-center">
                 <div className="relative">
-                  <img 
-                    src="/pixel-art-of-coins-or-money-exchanging-hands-betwe.jpg" 
+                  <Image
+                    src="/pixel-art-of-coins-or-money-exchanging-hands-betwe.jpg"
                     alt="Settle up"
-                    className="w-32 h-32 pixel-art-filter group-hover:scale-110 transition-transform"
+                    width={128}
+                    height={128}
+                    className="pixel-art-filter group-hover:scale-110 transition-transform"
                   />
                   <div className="absolute -top-2 -right-2 w-8 h-8 bg-[#C084FC] text-white rounded-full flex items-center justify-center font-bold pixel-text">3</div>
                 </div>

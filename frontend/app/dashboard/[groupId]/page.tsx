@@ -17,7 +17,8 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import Image from 'next/image';
+import { useState, useEffect, useCallback } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { createClient } from '@/lib/supabase/client';
 import { CakesAPI } from '@/lib/api/cakes';
@@ -26,13 +27,12 @@ import { UsersAPI } from '@/lib/api/users';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { ICON_OPTIONS } from '@/lib/constants';
 import type { Cake, CakeIngredient, User } from '@/types/database';
-import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
-
-import CakeFactoryArtifactAbi from '@/public/contracts/CakeFactory.json';
 import { parseUnits } from 'viem';
-import { useContractAddress } from '@/hooks/use-contract-address';
-
-export const CAKE_FACTORY_ABI = CakeFactoryArtifactAbi.abi;
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_ABI, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory';
+import { useUserContext, WalletType } from '@/contexts/UserContext';
+import { lemonClient } from '@/lib/lemon/client';
+import { TransactionResult } from '@lemoncash/mini-app-sdk';
 
 type MemberWithBalance = User & {
   balance: number;
@@ -47,7 +47,7 @@ type ExpenseWithDetails = CakeIngredient & {
 export default function GroupDetailPage({ params }: { params: { groupId: string } }) {
   const { groupId } = params;
   const { user: currentUser } = useCurrentUser();
-  const contractAddress = useContractAddress();
+  const { walletType } = useUserContext();
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -342,11 +342,44 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
         throw new Error('No valid payers or amounts found');
       }
 
+      if (walletType === WalletType.LEMON) {
+        // Format arguments for Lemon SDK
+        const formattedArgs = [
+          cake.id.toString(), // uint128 cakeId -> string
+          weights, // uint16[] weights -> number[] (fits in JS number range)
+          allPayerIds.map((id) => id.toString()), // uint64[] payerIds -> string[]
+          allAmounts.map((amount) => amount.toString()), // uint256[] amounts -> string[]
+        ];
+
+        const result = await lemonClient.callContract({
+          contractAddress: CONTRACT_ADDRESS_ETH_SEPOLIA,
+          functionName: 'addBatchedCakeIngredients',
+          args: formattedArgs,
+          chainId: CAKE_FACTORY_CHAIN_ID,
+          value: '0',
+        });
+
+        if (result.result === TransactionResult.SUCCESS && result.data?.txHash) {
+          await finalizeIngredientSubmission(result.data.txHash);
+          return;
+        }
+
+        if (result.result === TransactionResult.CANCELLED) {
+          throw new Error('Transaction cancelled by user');
+        }
+
+        if (result.result === TransactionResult.FAILED) {
+          throw new Error(result.error?.message || 'Failed to submit via Lemon Cash');
+        }
+
+        throw new Error('Unexpected response from Lemon Cash');
+      }
+
       // Call the smart contract
       // Note: writeContract doesn't return a promise in wagmi v2
       // Errors are handled via writeError state, user rejection is also handled there
       writeContract({
-        address: contractAddress,
+        address: CONTRACT_ADDRESS_ETH_SEPOLIA,
         abi: CAKE_FACTORY_ABI,
         functionName: 'addBatchedCakeIngredients',
         args: [
@@ -880,12 +913,15 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                     href={`/user/${member.id}`}
                     className="flex flex-col items-center gap-1 group"
                   >
-                    <div className="w-12 h-12 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl hover:scale-110 transition-transform cursor-pointer group-hover:border-2 group-hover:border-[#FF69B4]">
+                    <div className="w-12 h-12 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl hover:scale-110 transition-transform cursor-pointer group-hover:border-2 group-hover:border-[#FF69B4] overflow-hidden rounded">
                       {member.avatar_url ? (
-                        <img
+                        <Image
                           src={member.avatar_url}
                           alt={member.username}
-                          className="w-full h-full rounded"
+                          width={48}
+                          height={48}
+                          className="h-full w-full object-cover"
+                          unoptimized
                         />
                       ) : (
                         <span>{member.username.charAt(0).toUpperCase()}</span>
@@ -1088,12 +1124,15 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                           {index === 2 && <Award className="w-6 h-6 text-[#CD7F32]" />}
                         </div>
 
-                        <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl group-hover:border-2 group-hover:border-[#FF69B4] transition-all">
+                        <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl group-hover:border-2 group-hover:border-[#FF69B4] transition-all overflow-hidden rounded">
                           {member.avatar_url ? (
-                            <img
+                            <Image
                               src={member.avatar_url}
                               alt={member.username}
-                              className="w-full h-full rounded"
+                              width={48}
+                              height={48}
+                              className="h-full w-full object-cover"
+                              unoptimized
                             />
                           ) : (
                             <span>{member.username.charAt(0).toUpperCase()}</span>
@@ -1388,12 +1427,15 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                             >
                               {isPayer && <span className="text-white text-xs">✓</span>}
                             </div>
-                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg">
+                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg overflow-hidden rounded">
                               {member.avatar_url ? (
-                                <img
+                                <Image
                                   src={member.avatar_url}
                                   alt={member.username}
-                                  className="w-full h-full rounded"
+                                  width={32}
+                                  height={32}
+                                  className="h-full w-full object-cover"
+                                  unoptimized
                                 />
                               ) : (
                                 <span>{member.username.charAt(0).toUpperCase()}</span>
@@ -1529,12 +1571,15 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                             >
                               {isIncluded && <span className="text-white text-xs">✓</span>}
                             </div>
-                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg">
+                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg overflow-hidden rounded">
                               {member.avatar_url ? (
-                                <img
+                                <Image
                                   src={member.avatar_url}
                                   alt={member.username}
-                                  className="w-full h-full rounded"
+                                  width={32}
+                                  height={32}
+                                  className="h-full w-full object-cover"
+                                  unoptimized
                                 />
                               ) : (
                                 <span>{member.username.charAt(0).toUpperCase()}</span>

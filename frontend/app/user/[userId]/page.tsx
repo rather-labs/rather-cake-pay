@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ArrowLeft, Users, DollarSign, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { createClient } from '@/lib/supabase/client'
@@ -12,7 +13,7 @@ import { UsersAPI } from '@/lib/api/users'
 import { IngredientsAPI } from '@/lib/api/ingredients'
 import { useCurrentUser } from '@/hooks/use-current-user'
 import { ICON_OPTIONS } from '@/lib/constants'
-import type { Cake, User, CakeIngredient } from '@/types/database'
+import type { Cake, User } from '@/types/database'
 
 type CakeWithBalance = Cake & {
   userBalance: number
@@ -228,9 +229,16 @@ export default function UserProfilePage({ params }: { params: { userId: string }
         {/* User Profile Header */}
         <Card className="p-6 mb-6 pixel-card bg-white/80 backdrop-blur border-4 border-[#FFB6D9]">
           <div className="flex items-center gap-6">
-            <div className="w-20 h-20 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-4xl">
+            <div className="w-20 h-20 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-4xl overflow-hidden rounded">
               {user.avatar_url ? (
-                <img src={user.avatar_url} alt={user.username} className="w-full h-full rounded" />
+                <Image
+                  src={user.avatar_url}
+                  alt={user.username}
+                  width={80}
+                  height={80}
+                  className="h-full w-full object-cover"
+                  unoptimized
+                />
               ) : (
                 <span>{user.username.charAt(0).toUpperCase()}</span>
               )}
@@ -396,4 +404,3 @@ export default function UserProfilePage({ params }: { params: { userId: string }
     </div>
   )
 }
-

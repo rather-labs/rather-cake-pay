@@ -2,25 +2,31 @@
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import { registerUser } from '@/lib/actions/users';
-import { useUserContext } from '@/contexts/UserContext';
+import { useUserContext, WalletType } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
 import { UsersAPI } from '@/lib/api/users';
 import Link from 'next/link';
-import CakeFactoryArtifactAbi from '@/public/contracts/CakeFactory.json';
-import { useContractAddress } from '@/hooks/use-contract-address';
-
-export const CAKE_FACTORY_ABI = CakeFactoryArtifactAbi.abi;
+import { Header } from '@/components/Header';
+import { formatAddress } from '@/lib/utils/format';
+import { Footer } from '@/components/Footer';
+import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory';
+import { lemonClient } from '@/lib/lemon/client';
+import { TransactionResult } from '@lemoncash/mini-app-sdk';
+import { useLemonWallet } from '@/hooks/use-lemon-wallet';
+import { useFarcasterWallet } from '@/hooks/use-farcaster-wallet';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { walletAddress } = useUserContext();
+  const { walletAddress, walletType } = useUserContext();
   const { status: accountStatus } = useAccount();
-  const contractAddress = useContractAddress();
+  const lemon = useLemonWallet();
+  const farcaster = useFarcasterWallet();
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -44,62 +50,67 @@ export default function RegisterPage() {
   }, [writeError]);
 
   // Add effect to handle successful transaction
+  const completeRegistration = useCallback(async () => {
+    try {
+      if (!walletAddress) return;
+
+      const { data, error: registerError } = await registerUser(
+        walletAddress,
+        username.trim(),
+        avatarUrl.trim() || null
+      );
+
+      if (registerError) {
+        if (
+          registerError.includes('wallet_address') &&
+          (registerError.includes('duplicate') || registerError.includes('unique'))
+        ) {
+          router.push('/dashboard');
+          return;
+        }
+        if (
+          registerError.includes('username') &&
+          (registerError.includes('duplicate') || registerError.includes('unique'))
+        ) {
+          setError('This username is already taken. Please choose a different username.');
+          return;
+        }
+        setError(registerError);
+        return;
+      }
+
+      if (data) {
+        router.push('/dashboard');
+        router.refresh();
+      }
+    } catch (err) {
+      console.error('Error completing registration:', err);
+      setError(err instanceof Error ? err.message : 'Failed to complete registration');
+    } finally {
+      setIsRegistering(false);
+    }
+  }, [avatarUrl, router, username, walletAddress]);
+
   useEffect(() => {
     if (isConfirmed && hash) {
-      const completeRegistration = async () => {
-        try {
-          // Now register in database with the transaction hash
-          if (!walletAddress) return;
-
-          const { data, error: registerError } = await registerUser(
-            walletAddress,
-            username.trim(),
-            avatarUrl.trim() || null
-          );
-
-          if (registerError) {
-            if (
-              registerError.includes('wallet_address') &&
-              (registerError.includes('duplicate') || registerError.includes('unique'))
-            ) {
-              router.push('/dashboard');
-              return;
-            }
-            if (
-              registerError.includes('username') &&
-              (registerError.includes('duplicate') || registerError.includes('unique'))
-            ) {
-              setError('This username is already taken. Please choose a different username.');
-              return;
-            }
-            setError(registerError);
-            return;
-          }
-
-          if (data) {
-            // Redirect to dashboard after successful registration
-            router.push('/dashboard');
-            router.refresh();
-          }
-        } catch (err) {
-          console.error('Error completing registration:', err);
-          setError(err instanceof Error ? err.message : 'Failed to complete registration');
-        } finally {
-          setIsRegistering(false);
-        }
-      };
-
       completeRegistration();
     }
-  }, [isConfirmed, hash, walletAddress, username, avatarUrl, router]);
+  }, [completeRegistration, hash, isConfirmed]);
 
   // Wait for wagmi to be ready (status is not 'reconnecting' or initializing)
+  // Skip this check for Lemon/Farcaster as they don't use Wagmi
   useEffect(() => {
+    // For Lemon/Farcaster, mark wagmi as ready immediately
+    if (lemon.isLemonApp || farcaster.isInMiniApp) {
+      setWagmiReady(true);
+      return;
+    }
+
     // Wagmi is ready when status is 'connected' or 'disconnected' (not 'reconnecting' or undefined)
     if (accountStatus === 'connected' || accountStatus === 'disconnected') {
       setWagmiReady(true);
     }
-  }, [accountStatus]);
+  }, [accountStatus, lemon.isLemonApp, farcaster.isInMiniApp]);
 
   // Check if user is already registered and redirect to dashboard
   // Only run this check after wagmi is ready
@@ -175,18 +186,39 @@ export default function RegisterPage() {
         return;
       }
 
-      // Register on blockchain first
       console.log('Registering user on blockchain:', walletAddress);
 
+      if (walletType === WalletType.LEMON) {
+        const result = await lemonClient.callContract({
+          contractAddress: CONTRACT_ADDRESS_ETH_SEPOLIA,
+          functionName: 'registerUser',
+          args: [walletAddress as `0x${string}`],
+          chainId: CAKE_FACTORY_CHAIN_ID,
+          value: '0',
+        });
+
+        if (result.result === TransactionResult.SUCCESS && result.data?.txHash) {
+          await completeRegistration();
+          return;
+        }
+
+        if (result.result === TransactionResult.CANCELLED) {
+          throw new Error('Transaction cancelled by user');
+        }
+
+        if (result.result === TransactionResult.FAILED) {
+          throw new Error(result.error?.message || 'Failed to register via Lemon Cash');
+        }
+
+        throw new Error('Unexpected response from Lemon Cash');
+      }
+
       writeContract({
-        address: contractAddress,
+        address: CONTRACT_ADDRESS_ETH_SEPOLIA,
         abi: CAKE_FACTORY_ABI,
         functionName: 'registerUser',
         args: [walletAddress as `0x${string}`],
       });
-
-      // The rest of the registration (database) will happen in the useEffect
-      // after the transaction is confirmed
     } catch (err) {
       console.error('Error initiating registration:', err);
       setError(err instanceof Error ? err.message : 'Failed to register');
@@ -195,24 +227,8 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#F0F9F4] to-[#FFF9E5]">
-      {/* Header */}
-      <header className="border-b-4 border-[#FFB6D9] bg-white/80 backdrop-blur sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="w-12 h-12 bg-[#FF69B4] pixel-art-shadow flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                🍰
-              </div>
-              <span className="text-2xl font-bold pixel-text text-[#FF69B4]">CakePay</span>
-            </Link>
-
-            <div className="flex items-center gap-4">
-              <ConnectButton />
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#F0F9F4] to-[#FFF9E5] flex flex-col">
+      <Header />
 
       <div className="flex items-center justify-center p-4 min-h-[calc(100vh-80px)]">
         {isLoading ? (
@@ -255,8 +271,8 @@ export default function RegisterPage() {
                     >
                       Wallet Address
                     </label>
-                    <div className="px-4 py-3 border-4 border-[#B4E7CE] pixel-art-shadow bg-[#F0F9F4] font-mono text-sm text-[#2D3748]">
-                      {walletAddress}
+                    <div className="px-4 py-3 border-4 border-[#B4E7CE] pixel-art-shadow bg-[#F0F9F4] font-mono text-sm text-[#2D3748] break-all">
+                      {formatAddress(walletAddress)}
                     </div>
                     <p className="text-xs text-[#4A5568] mt-1">Connected wallet address</p>
                   </div>
@@ -304,10 +320,13 @@ export default function RegisterPage() {
                     </p>
                     {avatarUrl && (
                       <div className="mt-2 flex items-center gap-2">
-                        <img
+                        <Image
                           src={avatarUrl}
                           alt="Avatar preview"
-                          className="w-12 h-12 rounded-full border-2 border-[#FFB6D9] object-cover"
+                          width={48}
+                          height={48}
+                          className="rounded-full border-2 border-[#FFB6D9] object-cover"
+                          unoptimized
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                           }}
@@ -368,6 +387,8 @@ export default function RegisterPage() {
           </Card>
         )}
       </div>
+
+      <Footer />
     </div>
   );
 }

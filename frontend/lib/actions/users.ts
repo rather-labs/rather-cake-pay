@@ -77,6 +77,7 @@ export async function checkUserExists(walletAddress: string): Promise<{ exists: 
     const { data: user } = await usersAPI.getUserByWalletAddress(walletAddress)
     return { exists: !!user, user }
   } catch (error) {
+    console.error('Failed to check if user exists:', error)
     return { exists: false, user: null }
   }
 }
