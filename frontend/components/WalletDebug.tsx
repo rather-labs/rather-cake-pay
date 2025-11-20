@@ -6,6 +6,14 @@ import { useUserContext, WalletType } from '@/contexts/UserContext'
 import { useLemonWallet } from '@/hooks/use-lemon-wallet'
 import { useFarcasterWallet } from '@/hooks/use-farcaster-wallet'
 import { formatAddress } from '@/lib/utils/format'
+import { useAccount } from 'wagmi'
+import { createPublicClient, http, formatEther, type Address } from 'viem'
+import { sepolia } from 'viem/chains'
+
+const sepoliaClient = createPublicClient({
+  chain: sepolia,
+  transport: http('https://sepolia.gateway.tenderly.co'),
+})
 
 type ReactNativeWindow = Window & {
   ReactNativeWebView?: unknown
@@ -14,14 +22,51 @@ type ReactNativeWindow = Window & {
 export function WalletDebug() {
   const [mounted, setMounted] = useState(false)
   const [isExpanded, setIsExpanded] = useState(true)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
   const { walletType, walletAddress, isConnecting, connectWallet } = useUserContext()
   const lemon = useLemonWallet()
   const farcaster = useFarcasterWallet()
+  const { chain } = useAccount()
+  const [balanceStatus, setBalanceStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [balanceValue, setBalanceValue] = useState<string>('')
 
   // Only render after client-side mount to avoid hydration mismatch
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    if (!walletAddress || !walletAddress.startsWith('0x')) {
+      setBalanceStatus('idle')
+      setBalanceValue('')
+      return
+    }
+
+    let cancelled = false
+
+    const fetchBalance = async () => {
+      setBalanceStatus('loading')
+      try {
+        const value = await sepoliaClient.getBalance({
+          address: walletAddress as Address,
+        })
+        if (cancelled) return
+        setBalanceValue(formatEther(value))
+        setBalanceStatus('ready')
+      } catch (error) {
+        console.error('[WalletDebug] Failed to fetch Sepolia balance:', error)
+        if (!cancelled) {
+          setBalanceStatus('error')
+        }
+      }
+    }
+
+    fetchBalance()
+
+    return () => {
+      cancelled = true
+    }
+  }, [walletAddress])
 
   if (!mounted) {
     return null
@@ -59,6 +104,60 @@ export function WalletDebug() {
     }
   }
 
+  const handleCopyAddress = async () => {
+    if (!walletAddress || typeof navigator === 'undefined' || !navigator.clipboard) {
+      setCopyStatus('error')
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(walletAddress)
+      setCopyStatus('copied')
+      setTimeout(() => setCopyStatus('idle'), 1500)
+    } catch (error) {
+      console.error('[WalletDebug] Copy failed:', error)
+      setCopyStatus('error')
+      setTimeout(() => setCopyStatus('idle'), 1500)
+    }
+  }
+
+  const renderBalance = () => {
+    if (!walletAddress) {
+      return 'n/a'
+    }
+
+    if (!walletAddress.startsWith('0x')) {
+      return 'Unsupported wallet format'
+    }
+
+    switch (balanceStatus) {
+      case 'loading':
+        return 'loading...'
+      case 'error':
+        return 'error fetching balance'
+      case 'ready':
+        return `${balanceValue || '0'} ETH`
+      default:
+        return 'n/a'
+    }
+  }
+
+  const renderChain = () => {
+    if (walletType === WalletType.LEMON) {
+      return 'Ethereum Sepolia (Lemon Cash)'
+    }
+
+    if (walletType === WalletType.FARCASTER) {
+      return 'Warpcast Mini App (host managed)'
+    }
+
+    if (chain?.name) {
+      return `${chain.name} (ID: ${chain.id})`
+    }
+
+    return 'n/a'
+  }
+
   return (
     <div className="fixed bottom-4 right-4 bg-black/90 text-white p-4 rounded-lg text-xs max-w-sm z-50 max-h-[80vh] overflow-y-auto">
       <div className="flex justify-between items-center mb-2">
@@ -73,8 +172,22 @@ export function WalletDebug() {
 
       <div className="space-y-1">
         <div>Context Wallet Type: {walletType || 'null'}</div>
-        <div>Context Address: {walletAddress ? formatAddress(walletAddress) : 'none'}</div>
+        <div className="flex items-center justify-between gap-2">
+          <span>
+            Context Address: {walletAddress ? formatAddress(walletAddress) : 'none'}
+          </span>
+          {walletAddress && (
+            <button
+              onClick={handleCopyAddress}
+              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[10px]"
+            >
+              {copyStatus === 'copied' ? '✅ Copied' : copyStatus === 'error' ? '⚠️ Error' : 'Copy'}
+            </button>
+          )}
+        </div>
+        <div>ETH Balance: {renderBalance()}</div>
         <div>Context Loading: {isConnecting ? '✅' : '❌'}</div>
+        <div>Connected Chain: {renderChain()}</div>
 
         <div className="border-t border-gray-600 my-2 pt-2">
           <div className="font-semibold">Lemon Hook:</div>

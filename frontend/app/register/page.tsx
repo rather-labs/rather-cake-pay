@@ -2,24 +2,26 @@
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import { registerUser } from '@/lib/actions/users';
-import { useUserContext } from '@/contexts/UserContext';
+import { useUserContext, WalletType } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
 import { UsersAPI } from '@/lib/api/users';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
 import { formatAddress } from '@/lib/utils/format';
 import { Footer } from 'react-day-picker';
-import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_BASE_SEPOLIA } from '@/lib/contracts/cakeFactory';
+import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory';
+import { lemonClient } from '@/lib/lemon/client';
+import { TransactionResult } from '@lemoncash/mini-app-sdk';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { walletAddress } = useUserContext();
+  const { walletAddress, walletType } = useUserContext();
   const { status: accountStatus } = useAccount();
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -44,54 +46,52 @@ export default function RegisterPage() {
   }, [writeError]);
 
   // Add effect to handle successful transaction
+  const completeRegistration = useCallback(async () => {
+    try {
+      if (!walletAddress) return;
+
+      const { data, error: registerError } = await registerUser(
+        walletAddress,
+        username.trim(),
+        avatarUrl.trim() || null
+      );
+
+      if (registerError) {
+        if (
+          registerError.includes('wallet_address') &&
+          (registerError.includes('duplicate') || registerError.includes('unique'))
+        ) {
+          router.push('/dashboard');
+          return;
+        }
+        if (
+          registerError.includes('username') &&
+          (registerError.includes('duplicate') || registerError.includes('unique'))
+        ) {
+          setError('This username is already taken. Please choose a different username.');
+          return;
+        }
+        setError(registerError);
+        return;
+      }
+
+      if (data) {
+        router.push('/dashboard');
+        router.refresh();
+      }
+    } catch (err) {
+      console.error('Error completing registration:', err);
+      setError(err instanceof Error ? err.message : 'Failed to complete registration');
+    } finally {
+      setIsRegistering(false);
+    }
+  }, [avatarUrl, router, username, walletAddress]);
+
   useEffect(() => {
     if (isConfirmed && hash) {
-      const completeRegistration = async () => {
-        try {
-          // Now register in database with the transaction hash
-          if (!walletAddress) return;
-
-          const { data, error: registerError } = await registerUser(
-            walletAddress,
-            username.trim(),
-            avatarUrl.trim() || null
-          );
-
-          if (registerError) {
-            if (
-              registerError.includes('wallet_address') &&
-              (registerError.includes('duplicate') || registerError.includes('unique'))
-            ) {
-              router.push('/dashboard');
-              return;
-            }
-            if (
-              registerError.includes('username') &&
-              (registerError.includes('duplicate') || registerError.includes('unique'))
-            ) {
-              setError('This username is already taken. Please choose a different username.');
-              return;
-            }
-            setError(registerError);
-            return;
-          }
-
-          if (data) {
-            // Redirect to dashboard after successful registration
-            router.push('/dashboard');
-            router.refresh();
-          }
-        } catch (err) {
-          console.error('Error completing registration:', err);
-          setError(err instanceof Error ? err.message : 'Failed to complete registration');
-        } finally {
-          setIsRegistering(false);
-        }
-      };
-
       completeRegistration();
     }
-  }, [isConfirmed, hash, walletAddress, username, avatarUrl, router]);
+  }, [completeRegistration, hash, isConfirmed]);
 
   // Wait for wagmi to be ready (status is not 'reconnecting' or initializing)
   useEffect(() => {
@@ -175,18 +175,39 @@ export default function RegisterPage() {
         return;
       }
 
-      // Register on blockchain first
       console.log('Registering user on blockchain:', walletAddress);
 
+      if (walletType === WalletType.LEMON) {
+        const result = await lemonClient.callContract({
+          contractAddress: CONTRACT_ADDRESS_ETH_SEPOLIA,
+          functionName: 'registerUser',
+          args: [walletAddress as `0x${string}`],
+          chainId: CAKE_FACTORY_CHAIN_ID,
+          value: '0',
+        });
+
+        if (result.result === TransactionResult.SUCCESS && result.data?.txHash) {
+          await completeRegistration();
+          return;
+        }
+
+        if (result.result === TransactionResult.CANCELLED) {
+          throw new Error('Transaction cancelled by user');
+        }
+
+        if (result.result === TransactionResult.FAILED) {
+          throw new Error(result.error?.message || 'Failed to register via Lemon Cash');
+        }
+
+        throw new Error('Unexpected response from Lemon Cash');
+      }
+
       writeContract({
-        address: CONTRACT_ADDRESS_BASE_SEPOLIA,
+        address: CONTRACT_ADDRESS_ETH_SEPOLIA,
         abi: CAKE_FACTORY_ABI,
         functionName: 'registerUser',
         args: [walletAddress as `0x${string}`],
       });
-
-      // The rest of the registration (database) will happen in the useEffect
-      // after the transaction is confirmed
     } catch (err) {
       console.error('Error initiating registration:', err);
       setError(err instanceof Error ? err.message : 'Failed to register');

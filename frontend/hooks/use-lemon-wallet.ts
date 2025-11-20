@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { authenticate, isWebView, TransactionResult } from '@lemoncash/mini-app-sdk'
+import { authenticate, isWebView, TransactionResult, ChainId } from '@lemoncash/mini-app-sdk'
 
 interface UseLemonWalletReturn {
   /** Wallet address if authenticated */
@@ -50,7 +50,7 @@ export function useLemonWallet(): UseLemonWalletReturn {
     setIsLoading(true)
     try {
       console.log('[useLemonWallet] Calling authenticate()...')
-      const result = await authenticate()
+      const result = await authenticate({ chainId: ChainId.ETH_SEPOLIA })
       console.log('[useLemonWallet] Result:', result)
 
       if (result.result === TransactionResult.SUCCESS) {

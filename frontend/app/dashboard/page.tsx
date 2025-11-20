@@ -4,20 +4,22 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Plus, X } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useCakes } from '@/hooks/use-cakes';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { useUserContext } from '@/contexts/UserContext';
+import { useUserContext, WalletType } from '@/contexts/UserContext';
 import { ICON_OPTIONS } from '@/lib/constants';
 import { createCake } from '@/lib/actions/cakes';
 import { searchUsers } from '@/lib/actions/users';
 import type { User } from '@/types/database';
 import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
-import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_BASE_SEPOLIA } from '@/lib/contracts/cakeFactory';
+import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory';
+import { lemonClient } from '@/lib/lemon/client';
+import { TransactionResult } from '@lemoncash/mini-app-sdk';
 
 export default function Dashboard() {
-  const { walletAddress } = useUserContext();
+  const { walletAddress, walletType } = useUserContext();
   const { user, loading: userLoading } = useCurrentUser();
   const { cakes, loading: cakesLoading, error, refresh } = useCakes(user?.id || 0);
 
@@ -40,13 +42,15 @@ export default function Dashboard() {
     hash,
   });
 
-  const [pendingGroupData, setPendingGroupData] = useState<{
+  type PendingGroupData = {
     name: string;
     description: string | null;
     iconIndex: number;
     creatorId: number;
     memberIds: number[];
-  } | null>(null);
+  };
+
+  const [pendingGroupData, setPendingGroupData] = useState<PendingGroupData | null>(null);
 
   useEffect(() => {
     if (writeError) {
@@ -57,57 +61,63 @@ export default function Dashboard() {
     }
   }, [writeError]);
 
+  const completeGroupCreation = useCallback(
+    async (txHash?: string, overrideData?: PendingGroupData | null) => {
+      const dataToPersist = overrideData ?? pendingGroupData;
+      if (!dataToPersist) {
+        return;
+      }
+
+      if (txHash) {
+        console.log('Transaction confirmed! Hash:', txHash);
+      }
+      console.log('Creating group in database...');
+
+      try {
+        const { data, error: dbError } = await createCake(
+          dataToPersist.name,
+          dataToPersist.description,
+          dataToPersist.iconIndex,
+          dataToPersist.creatorId,
+          dataToPersist.memberIds
+        );
+
+        if (dbError) {
+          setCreateError(dbError);
+          return;
+        }
+
+        if (data) {
+          setShowCreateModal(false);
+          setGroupName('');
+          setDescription('');
+          setSelectedIcon(ICON_OPTIONS[0]);
+          setSelectedMembers([]);
+          setMemberSearchQueries(['']);
+          setMemberSearchResults([[]]);
+          setShowMemberDropdowns([false]);
+          setToken('0x0000000000000000000000000000000000000000');
+          setInterestRate('0');
+          setCreateError(null);
+          setPendingGroupData(null);
+
+          await refresh();
+        }
+      } catch (error) {
+        console.error('Error creating group in database:', error);
+        setCreateError(error instanceof Error ? error.message : 'Failed to create group in database');
+      } finally {
+        setIsCreating(false);
+      }
+    },
+    [pendingGroupData, refresh]
+  );
+
   useEffect(() => {
     if (isConfirmed && hash && pendingGroupData) {
-      const completeGroupCreation = async () => {
-        console.log('Transaction confirmed! Hash:', hash);
-        console.log('Creating group in database...');
-
-        try {
-          const { data, error: dbError } = await createCake(
-            pendingGroupData.name,
-            pendingGroupData.description,
-            pendingGroupData.iconIndex,
-            pendingGroupData.creatorId,
-            pendingGroupData.memberIds
-          );
-
-          if (dbError) {
-            setCreateError(dbError);
-            return;
-          }
-
-          if (data) {
-            // Reset form and close modal
-            setShowCreateModal(false);
-            setGroupName('');
-            setDescription('');
-            setSelectedIcon(ICON_OPTIONS[0]);
-            setSelectedMembers([]);
-            setMemberSearchQueries(['']);
-            setMemberSearchResults([[]]);
-            setShowMemberDropdowns([false]);
-            setToken('0x0000000000000000000000000000000000000000');
-            setInterestRate('0');
-            setCreateError(null);
-            setPendingGroupData(null);
-
-            // Refresh the cakes list
-            await refresh();
-          }
-        } catch (error) {
-          console.error('Error creating group in database:', error);
-          setCreateError(
-            error instanceof Error ? error.message : 'Failed to create group in database'
-          );
-        } finally {
-          setIsCreating(false);
-        }
-      };
-
-      completeGroupCreation();
+      completeGroupCreation(hash, pendingGroupData);
     }
-  }, [isConfirmed, hash, pendingGroupData, refresh]);
+  }, [completeGroupCreation, hash, isConfirmed, pendingGroupData]);
 
   // Helper function to get icon from index
   const getIconFromIndex = (index: number | null) => {
@@ -269,13 +279,14 @@ export default function Dashboard() {
       const iconIndexValue = iconIndex >= 0 ? iconIndex : 0;
 
       // Store data for database creation after blockchain confirmation
-      setPendingGroupData({
+      const nextGroupData: PendingGroupData = {
         name: groupName.trim(),
         description: description.trim() || null,
         iconIndex: iconIndexValue,
         creatorId: user.id,
         memberIds: memberIds,
-      });
+      };
+      setPendingGroupData(nextGroupData);
 
       // Prepare blockchain data
       // All member IDs including creator
@@ -306,9 +317,40 @@ export default function Dashboard() {
         billingPeriod: billingPeriodSeconds.toString(),
       });
 
+      if (walletType === WalletType.LEMON) {
+        const result = await lemonClient.callContract({
+          contractAddress: CONTRACT_ADDRESS_ETH_SEPOLIA,
+          functionName: 'createCake',
+          args: [
+            tokenAddress as `0x${string}`,
+            allMemberIds,
+            weights,
+            interestRateBPS,
+            billingPeriodSeconds,
+          ],
+          chainId: CAKE_FACTORY_CHAIN_ID,
+          value: '0',
+        });
+
+        if (result.result === TransactionResult.SUCCESS && result.data?.txHash) {
+          await completeGroupCreation(result.data.txHash, nextGroupData);
+          return;
+        }
+
+        if (result.result === TransactionResult.CANCELLED) {
+          throw new Error('Transaction cancelled by user');
+        }
+
+        if (result.result === TransactionResult.FAILED) {
+          throw new Error(result.error?.message || 'Failed to create group via Lemon Cash');
+        }
+
+        throw new Error('Unexpected response from Lemon Cash');
+      }
+
       // Call the smart contract with correct parameter order
       writeContract({
-        address: CONTRACT_ADDRESS_BASE_SEPOLIA,
+        address: CONTRACT_ADDRESS_ETH_SEPOLIA,
         abi: CAKE_FACTORY_ABI,
         functionName: 'createCake',
         args: [
@@ -319,8 +361,6 @@ export default function Dashboard() {
           billingPeriodSeconds, // uint64 billingPeriod in seconds
         ],
       });
-
-      // The rest will happen in the useEffect after confirmation
     } catch (error) {
       console.error('Error initiating group creation:', error);
       setCreateError(error instanceof Error ? error.message : 'Failed to create group');
