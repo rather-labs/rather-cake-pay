@@ -451,13 +451,20 @@ contract CakeFactory is Ownable, ReentrancyGuard {
     function payCakeSlice(uint128 cakeId, IERC20 token) public nonReentrant payable {
         require(userIds[msg.sender] != 0, "User not registered");
         
-        int256 userBalance = cakes[cakeId].currentBalances[userIds[msg.sender]];
+        uint64 callerUserId = userIds[msg.sender];
+        uint64 indexPlusOne = cakeMemberIndex[cakeId][callerUserId];
+        if (indexPlusOne == 0) {
+            revert NotMember(callerUserId);
+        }
+        uint256 memberIdx = uint256(indexPlusOne - 1);
+        
+        int256 userBalance = cakes[cakeId].currentBalances[memberIdx];
         require(userBalance < 0, "User has no debt in the cake to pay");
-
-        cakes[cakeId].currentBalances[userIds[msg.sender]] = 0;  
 
         address tokenAddress = address(token);
         uint256 amountToPay = uint256(-userBalance);
+        
+        // Process swap if needed (before payment to ensure we have the right token)
         if (tokenAddress != cakes[cakeId].token) {
             PoolKey memory key = getPoolKey(tokenAddress, cakes[cakeId].token);
             require(Currency.unwrap(key.currency0) != address(0) && Currency.unwrap(key.currency1) != address(0), "Pool not configured");
@@ -465,14 +472,18 @@ contract CakeFactory is Ownable, ReentrancyGuard {
             _swapExactOutputSingle(key, zeroForOne, uint128(amountToPay), type(uint128).max);
         } 
 
+        // Process payment
         if (tokenAddress == address(0)) {
             require(msg.value >= amountToPay, "Insufficient ETH sent");
+            // ETH is automatically sent with the transaction, no transfer needed
         } else {
             IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), amountToPay);
         }
 
-        emit CakeSlicePaid(cakeId, userIds[msg.sender], userBalance);
+        // Reset balance 
+        cakes[cakeId].currentBalances[memberIdx] = 0;
 
+        emit CakeSlicePaid(cakeId, callerUserId, userBalance);
     }
 
     /**
@@ -480,30 +491,43 @@ contract CakeFactory is Ownable, ReentrancyGuard {
      * @param cakeId The ID of the cake
      * @param token The token to claim in
      */
-    function claimCakeSlice(uint128 cakeId, IERC20 token) public payable nonReentrant {
+    function claimCakeSlice(uint128 cakeId, IERC20 token) public nonReentrant {
         require(userIds[msg.sender] != 0, "User not registered");
         
-        int256 userBalance = cakes[cakeId].currentBalances[userIds[msg.sender]];
+        uint64 callerUserId = userIds[msg.sender];
+        uint64 indexPlusOne = cakeMemberIndex[cakeId][callerUserId];
+        if (indexPlusOne == 0) {
+            revert NotMember(callerUserId);
+        }
+        uint256 memberIdx = uint256(indexPlusOne - 1);
+        
+        int256 userBalance = cakes[cakeId].currentBalances[memberIdx];
         require(userBalance > 0, "User has no credit in the cake to claim");
 
-        cakes[cakeId].currentBalances[userIds[msg.sender]] = 0;  
-
         address tokenAddress = address(token);
+        uint256 amountToClaim = uint256(userBalance);
+        
+        // Process swap if needed (before claim to ensure we have the right token)
         if (tokenAddress != cakes[cakeId].token) {
             PoolKey memory key = getPoolKey(tokenAddress, cakes[cakeId].token);
             require(Currency.unwrap(key.currency0) != address(0) && Currency.unwrap(key.currency1) != address(0), "Pool not configured");
             bool zeroForOne = tokenAddress < cakes[cakeId].token;
-            _swapExactInputSingle(key, zeroForOne, uint128(uint256(userBalance)), type(uint128).max);
+            _swapExactInputSingle(key, zeroForOne, uint128(amountToClaim), type(uint128).max);
         } 
 
-        uint256 amountToClaim = uint256(userBalance);
+        // Process claim transfer
         if (tokenAddress == address(0)) {
-            require(msg.value >= amountToClaim, "Insufficient ETH sent");
+            require(address(this).balance >= amountToClaim, "Insufficient contract balance");
+            (bool success, ) = payable(msg.sender).call{value: amountToClaim}("");
+            require(success, "Payment failed");
         } else {
             IERC20(tokenAddress).safeTransfer(msg.sender, amountToClaim);
         }
     
-        emit CakeSliceClaimed(cakeId, userIds[msg.sender], userBalance);
+        // Reset balance
+        cakes[cakeId].currentBalances[memberIdx] = 0;
+
+        emit CakeSliceClaimed(cakeId, callerUserId, userBalance);
     }
 
     /**
@@ -828,5 +852,9 @@ contract CakeFactory is Ownable, ReentrancyGuard {
         return IERC20(outputCurrency).balanceOf(address(this)) - balancePreSwap;
     }
 
-
+    /**
+     * @notice Allows the contract to receive ETH
+     * @dev This is necessary for the contract to accept ETH payments
+     */
+    receive() external payable {}
 }
