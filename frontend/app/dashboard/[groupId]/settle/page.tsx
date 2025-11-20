@@ -10,6 +10,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { createClient } from '@/lib/supabase/client'
 import { CakesAPI } from '@/lib/api/cakes'
 import { UsersAPI } from '@/lib/api/users'
+import { IngredientsAPI } from '@/lib/api/ingredients'
 import { useCurrentUser } from '@/hooks/use-current-user'
 import type { Cake, User } from '@/types/database'
 
@@ -56,6 +57,7 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
         const supabase = createClient()
         const cakesAPI = new CakesAPI(supabase)
         const usersAPI = new UsersAPI(supabase)
+        const ingredientsAPI = new IngredientsAPI(supabase)
 
         // Fetch cake
         const { data: cakeData, error: cakeError } = await cakesAPI.getCake(cakeId)
@@ -72,6 +74,9 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
           return
         }
 
+        // Fetch non-settled ingredients (pending + submitted) to include in balance calculations
+        const { data: nonSettledIngredients } = await ingredientsAPI.getNonSettledIngredients(cakeId)
+
         // Fetch members
         if (cakeData.member_ids && cakeData.member_ids.length > 0) {
           const { data: memberUsers, error: membersError } = await usersAPI.validateUserIds(cakeData.member_ids)
@@ -83,10 +88,39 @@ export default function SettleUpPage({ params }: { params: { groupId: string } }
             // Calculate balances from current_balances array
             // Balance convention: positive = user is owed (can claim), negative = user owes (needs to pay)
             const balances = cakeData.current_balances || []
-            const membersWithBalances: MemberWithBalance[] = memberUsers.map((member, index) => ({
-              ...member,
-              balance: Number.parseFloat(balances[index] || '0')
-            }))
+            const membersWithBalances: MemberWithBalance[] = memberUsers.map((member, index) => {
+              // Start with on-chain balance
+              let balance = Number.parseFloat(balances[index] || '0')
+
+              // Add contributions from non-settled ingredients (pending + submitted)
+              if (nonSettledIngredients && cakeData.member_ids) {
+                for (const ingredient of nonSettledIngredients) {
+                  // Calculate user's share based on weights
+                  if (ingredient.weights && ingredient.weights[index] > 0) {
+                    const totalWeight = ingredient.weights.reduce((sum, w) => sum + (w || 0), 0)
+                    const userWeight = ingredient.weights[index] || 0
+                    if (totalWeight > 0) {
+                      const amounts = ingredient.amounts || []
+                      const totalAmount = amounts.reduce((sum, amt) => sum + Number.parseFloat(amt || '0'), 0)
+                      const userShare = (totalAmount * userWeight) / totalWeight
+                      balance -= userShare // User owes this share (decrease balance, make more negative)
+                    }
+                  }
+
+                  // Add amount user paid (if user is a payer)
+                  if (ingredient.payer_ids?.includes(member.id)) {
+                    const payerIndex = ingredient.payer_ids.indexOf(member.id)
+                    const paidAmount = Number.parseFloat(ingredient.amounts?.[payerIndex] || '0')
+                    balance += paidAmount // User paid this, so increase balance (make more positive)
+                  }
+                }
+              }
+
+              return {
+                ...member,
+                balance
+              }
+            })
 
             // Separate members by settlement status
             const needToPay = membersWithBalances

@@ -92,8 +92,9 @@ export class BalancesAPI {
     memberIds: number[]
   ): Promise<{ data: Map<number, UserBalance> | null; error: Error | null }> {
     try {
-      // Get all ingredients for the cake
-      const { data: ingredients, error: ingredientsError } = await this.ingredientsAPI.getCakeIngredients(cakeId)
+      // Get only non-settled ingredients (pending + submitted)
+      // Settled expenses are already reflected in on-chain balances
+      const { data: ingredients, error: ingredientsError } = await this.ingredientsAPI.getNonSettledIngredients(cakeId)
       if (ingredientsError) throw ingredientsError
       if (!ingredients) return { data: new Map(), error: null }
 
