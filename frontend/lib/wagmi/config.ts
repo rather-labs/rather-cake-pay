@@ -8,3 +8,5 @@ export const config = getDefaultConfig({
   ssr: true, // If your dApp uses server side rendering (SSR)
 })
 
+
+
