@@ -52,7 +52,7 @@ contract CakeFactory {
     // Mapping from user Ids to mapping of cakes its participating in and where it has debts to the cake
     mapping(uint64 => mapping(uint128 => bool)) public userCakes;
     // Mapping from user ID to the list of cake IDs they belong to
-    mapping(uint64 => uint128[]) private userCakeIds;    
+    mapping(uint64 => uint128[]) private userCakeIds;
     // Mapping from cake ID to mapping of member ID to member index in cake arrays
     mapping(uint128 => mapping(uint64 => uint64)) public cakeMemberIndex; // quick lookup for member index in cake arrays
 
@@ -175,8 +175,8 @@ contract CakeFactory {
             cake.memberWeights[i] = memberWeightsBps[i];
             cake.currentBalances[i] = 0;
             cakeMemberIndex[cakeId][memberId] = uint64(i + 1);
-            userCakes[memberId][cakeId] = true;// mark that the user is part of this cake
-            userCakeIds[memberId].push(cakeId);// how to track cakes per user
+            userCakes[memberId][cakeId] = true; // mark that the user is part of this cake
+            userCakeIds[memberId].push(cakeId); // how to track cakes per user
         }
 
         emit CakeCreated(cakeId);
@@ -539,7 +539,7 @@ contract CakeFactory {
             revert MemberNotRegistered(userId);
         }
         return userCakeIds[userId];
-    }    
+    }
     /**
      * @notice Returns the member roster plus their payment weights (same ordering).
      * @dev Reverts if the cake doesn’t exist or its metadata arrays diverge.
@@ -549,18 +549,14 @@ contract CakeFactory {
      */
     function getCakeMemberConfig(
         uint128 cakeId
-    )
-        external
-        view
-        returns (uint64[] memory memberIds, uint16[] memory memberWeights)
-    {
+    ) external view returns (uint64[] memory memberIds, uint16[] memory memberWeights) {
         Cake storage cake = cakes[cakeId];
         if (cake.createdAt == 0) {
             revert CakeDoesNotExist(cakeId);
         }
         if (cake.memberIds.length != cake.memberWeights.length) {
             revert InvalidMembers();
-        }        
+        }
         return (cake.memberIds, cake.memberWeights);
     }
 }
