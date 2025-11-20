@@ -10,6 +10,7 @@ import { useAccount } from 'wagmi'
 import { createPublicClient, http, formatEther, type Address } from 'viem'
 import { sepolia } from 'viem/chains'
 import { lemonClient } from '@/lib/lemon/client'
+import { CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory'
 
 const sepoliaClient = createPublicClient({
   chain: sepolia,
@@ -32,6 +33,8 @@ export function WalletDebug() {
   const [balanceValue, setBalanceValue] = useState<string>('')
   const [isTestingDeposit, setIsTestingDeposit] = useState(false)
   const [depositResult, setDepositResult] = useState<string>('')
+  const [isTestingCreateCake, setIsTestingCreateCake] = useState(false)
+  const [createCakeResult, setCreateCakeResult] = useState<string>('')
 
   // Only render after client-side mount to avoid hydration mismatch
   useEffect(() => {
@@ -211,6 +214,62 @@ export function WalletDebug() {
     }
   }
 
+  const handleTestCreateCake = async () => {
+    if (!lemon.isLemonApp) {
+      setCreateCakeResult('❌ Not in Lemon app')
+      return
+    }
+
+    if (!walletAddress) {
+      setCreateCakeResult('❌ No wallet connected')
+      return
+    }
+
+    setIsTestingCreateCake(true)
+    setCreateCakeResult('🔄 Testing createCake...')
+
+    try {
+      // Simulate the same data structure as dashboard
+      const memberIds = ['1', '2'] // Test with user IDs 1 and 2
+      const weights = [5000, 5000] // 50/50 split
+      const interestRate = '500' // 5% = 500 BPS
+      const billingPeriod = '2592000' // 30 days in seconds
+      const tokenAddress = '0x0000000000000000000000000000000000000000' // ETH
+
+      const formattedArgs = [
+        tokenAddress as `0x${string}`,
+        memberIds,
+        weights,
+        interestRate,
+        billingPeriod,
+      ]
+
+      setCreateCakeResult(`📤 Args: ${JSON.stringify(formattedArgs).slice(0, 50)}...`)
+
+      const result = await lemonClient.callContract({
+        contractAddress: CONTRACT_ADDRESS_ETH_SEPOLIA,
+        functionName: 'createCake',
+        args: formattedArgs,
+        chainId: CAKE_FACTORY_CHAIN_ID,
+        value: '0',
+      })
+
+      if (result.result === 'SUCCESS' && result.data?.txHash) {
+        setCreateCakeResult(`✅ Success! TX: ${result.data.txHash.slice(0, 10)}...`)
+      } else if (result.result === 'CANCELLED') {
+        setCreateCakeResult('⚠️ Transaction cancelled')
+      } else if (result.result === 'FAILED') {
+        setCreateCakeResult(`❌ Failed: ${result.error?.message || 'Unknown'}`)
+      } else {
+        setCreateCakeResult(`❌ Unexpected: ${JSON.stringify(result).slice(0, 100)}`)
+      }
+    } catch (error) {
+      setCreateCakeResult(`❌ Error: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setIsTestingCreateCake(false)
+    }
+  }
+
   return (
     <div className="fixed bottom-4 right-4 bg-black/90 text-white p-4 rounded-lg text-xs max-w-sm z-50 max-h-[80vh] overflow-y-auto">
       <div className="flex justify-between items-center mb-2">
@@ -284,12 +343,28 @@ export function WalletDebug() {
                 {isTestingDeposit ? '⏳ Testing...' : '🧪 Test callContract (USDC Approve)'}
               </button>
               {depositResult && (
-                <div className="text-[10px] text-gray-200 mt-1 p-2 bg-black/30 rounded">
+                <div className="text-[10px] text-gray-200 mt-1 p-2 bg-black/30 rounded break-all">
                   {depositResult}
                 </div>
               )}
-              <div className="text-[10px] text-gray-400 mt-1">
+              <div className="text-[10px] text-gray-400 mt-1 mb-3">
                 Tests callContract with USDC approve on Sepolia
+              </div>
+
+              <button
+                onClick={handleTestCreateCake}
+                disabled={isTestingCreateCake}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 px-3 py-2 rounded text-sm font-medium mb-2"
+              >
+                {isTestingCreateCake ? '⏳ Testing...' : '🍰 Test createCake'}
+              </button>
+              {createCakeResult && (
+                <div className="text-[10px] text-gray-200 mt-1 p-2 bg-black/30 rounded break-all">
+                  {createCakeResult}
+                </div>
+              )}
+              <div className="text-[10px] text-gray-400 mt-1">
+                Tests createCake with dummy data
               </div>
             </div>
           </>

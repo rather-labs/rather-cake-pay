@@ -314,42 +314,53 @@ export default function Dashboard() {
       // Default billing period: 30 days in seconds
       const billingPeriodSeconds = BigInt(30 * 24 * 60 * 60); // 30 days
 
-      console.log('Creating cake on blockchain:', {
+      const formattedArgs = [
+        tokenAddress as `0x${string}`,
+        allMemberIds.map(id => id.toString()), // uint64[] -> string[]
+        weights, // uint16[] -> number[] (fits in JS number range)
+        interestRateBPS.toString(), // uint16 -> string
+        billingPeriodSeconds.toString(), // uint64 -> string
+      ];
+
+      console.log('[Dashboard] Creating cake on blockchain:', {
         token: tokenAddress,
         memberIds: allMemberIds.map((id) => id.toString()),
         weights,
         interestRate: interestRateBPS,
         billingPeriod: billingPeriodSeconds.toString(),
+        formattedArgs,
       });
 
       if (walletType === WalletType.LEMON) {
+        console.log('[Dashboard] Calling Lemon SDK callContract with args:', formattedArgs);
+
         const result = await lemonClient.callContract({
           contractAddress: CONTRACT_ADDRESS_ETH_SEPOLIA,
           functionName: 'createCake',
-          args: [
-            tokenAddress as `0x${string}`,
-            allMemberIds,
-            weights,
-            interestRateBPS,
-            billingPeriodSeconds,
-          ],
+          args: formattedArgs,
           chainId: CAKE_FACTORY_CHAIN_ID,
           value: '0',
         });
 
+        console.log('[Dashboard] Lemon SDK result:', result);
+
         if (result.result === TransactionResult.SUCCESS && result.data?.txHash) {
+          console.log('[Dashboard] Transaction successful, hash:', result.data.txHash);
           await completeGroupCreation(result.data.txHash, nextGroupData);
           return;
         }
 
         if (result.result === TransactionResult.CANCELLED) {
+          console.log('[Dashboard] Transaction cancelled by user');
           throw new Error('Transaction cancelled by user');
         }
 
         if (result.result === TransactionResult.FAILED) {
+          console.error('[Dashboard] Transaction failed:', result.error);
           throw new Error(result.error?.message || 'Failed to create group via Lemon Cash');
         }
 
+        console.error('[Dashboard] Unexpected response from Lemon Cash:', result);
         throw new Error('Unexpected response from Lemon Cash');
       }
 
