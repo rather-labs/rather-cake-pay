@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState, useEffect, useCallback } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { createClient } from '@/lib/supabase/client';
 import { CakesAPI } from '@/lib/api/cakes';
@@ -29,10 +28,15 @@ import { ICON_OPTIONS } from '@/lib/constants';
 import type { Cake, CakeIngredient, User } from '@/types/database';
 import { parseUnits } from 'viem';
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_ABI, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory';
+import {
+  CONTRACT_ADDRESS_ETH_SEPOLIA,
+  CAKE_FACTORY_ABI,
+  CAKE_FACTORY_CHAIN_ID,
+} from '@/lib/contracts/cakeFactory';
 import { useUserContext, WalletType } from '@/contexts/UserContext';
 import { lemonClient } from '@/lib/lemon/client';
 import { TransactionResult } from '@lemoncash/mini-app-sdk';
+import { useState, useEffect, useCallback } from 'react';
 
 type MemberWithBalance = User & {
   balance: number;
@@ -188,6 +192,25 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     fetchCakeData();
   }, [groupId, currentUser]);
 
+  const finalizeIngredientSubmission = useCallback(
+    async (txHash: string) => {
+        try {
+          const supabase = createClient();
+          const ingredientsAPI = new IngredientsAPI(supabase);
+          const pendingIngredients = expenses.filter((exp) => exp.status === 'pending');
+          for (const ingredient of pendingIngredients) {
+            await ingredientsAPI.markIngredientSubmitted(ingredient.id, txHash);
+           }
+        window.location.reload();
+      } catch (error) {
+        console.error('Error updating ingredient statuses:', error);
+        alert('Transaction confirmed but failed to update statuses. Please refresh the page.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [expenses]
+  );
   // Calculate totals and current user balance
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.totalAmount, 0);
 
@@ -205,7 +228,9 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     // Add contributions from non-settled ingredients (pending + submitted)
     // Balance convention: positive = you are owed, negative = you owe
     // Only include expenses that haven't been settled (pending or submitted)
-    const nonSettledExpenses = expenses.filter((exp) => exp.status === 'pending' || exp.status === 'submitted');
+    const nonSettledExpenses = expenses.filter(
+      (exp) => exp.status === 'pending' || exp.status === 'submitted'
+    );
     for (const expense of nonSettledExpenses) {
       if (expense.weights && expense.weights[memberIndex] > 0) {
         const totalWeight = expense.weights.reduce((sum, w) => sum + (w || 0), 0);
@@ -229,9 +254,11 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
 
   // Count pending ingredients (not yet submitted on-chain) - for UI widget
   const pendingIngredientsCount = expenses.filter((exp) => exp.status === 'pending').length;
-  
+
   // Count non-settled ingredients (pending + submitted, not yet settled) - for balance calculations
-  const nonSettledIngredientsCount = expenses.filter((exp) => exp.status === 'pending' || exp.status === 'submitted').length;
+  const nonSettledIngredientsCount = expenses.filter(
+    (exp) => exp.status === 'pending' || exp.status === 'submitted'
+  ).length;
 
   // Calculate complete balances for all members (including pending ingredients)
   const membersWithCompleteBalances = members.map((member) => {
@@ -246,7 +273,9 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     // Add contributions from non-settled ingredients (pending + submitted)
     // Balance convention: positive = you are owed, negative = you owe
     // Only include expenses that haven't been settled (pending or submitted)
-    const nonSettledExpenses = expenses.filter((exp) => exp.status === 'pending' || exp.status === 'submitted');
+    const nonSettledExpenses = expenses.filter(
+      (exp) => exp.status === 'pending' || exp.status === 'submitted'
+    );
     for (const expense of nonSettledExpenses) {
       if (expense.weights && expense.weights[memberIndex] > 0) {
         const totalWeight = expense.weights.reduce((sum, w) => sum + (w || 0), 0);
@@ -310,7 +339,7 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
       if (allWeightsMatch && firstIngredientWeights.length > 0) {
         // Weights are already stored in BPS format (0-10000) in the database
         weights = firstIngredientWeights.map((w) => Math.floor(w));
-        
+
         // Validate that weights sum to 10000
         const weightSum = weights.reduce((sum, w) => sum + w, 0);
         if (weightSum !== 10000) {
@@ -707,7 +736,7 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
         }
 
         const equalWeightBPS = Math.floor(BPS_DENOMINATOR / participantCount);
-        let remainingBPS = BPS_DENOMINATOR - (equalWeightBPS * participantCount);
+        let remainingBPS = BPS_DENOMINATOR - equalWeightBPS * participantCount;
 
         for (const memberId of memberIds) {
           const memberIdStr = memberId.toString();
@@ -1639,19 +1668,20 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                           (sum, id) => sum + (newExpense.weights[id] || 0),
                           0
                         );
-                        
+
                         return (
                           <>
                             {newExpense.splitBetween.map((memberId) => {
                               const member = members.find((m) => m.id.toString() === memberId);
                               if (!member) return null;
-                              
+
                               // Calculate percentage for display
                               const currentWeight = newExpense.weights[memberId] || 0;
-                              const percentage = totalWeight > 0 
-                                ? ((currentWeight / totalWeight) * 100).toFixed(2)
-                                : '0.00';
-                              
+                              const percentage =
+                                totalWeight > 0
+                                  ? ((currentWeight / totalWeight) * 100).toFixed(2)
+                                  : '0.00';
+
                               return (
                                 <div key={memberId} className="flex items-center gap-2">
                                   <span className="text-sm text-[#4A5568] w-24 truncate">
@@ -1685,7 +1715,8 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                               );
                             })}
                             <div className="text-xs text-[#4A5568] mt-2 pt-2 border-t border-[#B4E7CE]">
-                              Total: {totalWeight > 0 ? '100.00%' : '0.00%'} (normalized to 10000 BPS)
+                              Total: {totalWeight > 0 ? '100.00%' : '0.00%'} (normalized to 10000
+                              BPS)
                             </div>
                           </>
                         );
