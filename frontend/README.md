@@ -1,4 +1,4 @@
-# Rather Cake Pay - Frontend  
+# Rather Cake Pay - Frontend
 
 TypeScript/Next.js for the Rather Cake Pay bill splitting application.
 
@@ -10,11 +10,12 @@ TypeScript/Next.js for the Rather Cake Pay bill splitting application.
 - Cake ingredient tracking
 - Payment settlement interface
 - Real-time updates
-- User position visualization among different 
+- User position visualization among different
   - Leaderbords
   - Yields earning with uncut cakes
 
-## TODOs 
+## TODOs
+
 - Add script for local and remote deployment
 - Implement server side database managing and ingredient batching
 - Implement frontend with various miniapp embeddings

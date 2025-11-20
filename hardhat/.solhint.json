@@ -1,0 +1,19 @@
+{
+  "extends": "solhint:recommended",
+  "rules": {
+    "avoid-suicide": "warn",
+    "avoid-sha3": "warn",
+    "check-send-result": "warn",
+    "compiler-version": ["error", "^0.8.24"],
+    "func-visibility": ["warn", { "ignoreConstructors": true }],
+    "max-line-length": ["warn", 120],
+    "no-console": "off",
+    "no-empty-blocks": "warn",
+    "no-unused-vars": "warn",
+    "payable-fallback": "warn",
+    "reason-string": ["warn", { "maxLength": 32 }],
+    "state-visibility": "warn"
+  },
+  "plugins": []
+}
+
