@@ -11,7 +11,7 @@
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.24-blue)](https://soliditylang.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
 
-[Live Demo](#) • [Documentation](#key-features) • [Contributing](#contributing)
+[Live Demo](https://rather-cake-pay.vercel.app/) • [Documentation](#key-features) • [Contributing](#contributing)
 
 </div>
 
@@ -35,12 +35,14 @@ CakePay is a **decentralized bill-splitting dApp** that makes group expense mana
 ## ✨ Key Features
 
 ### 🏢 Multi-Platform Support
+
 - **Standard Web3**: Full Wagmi + RainbowKit integration
 - **Lemon Cash**: Native integration with Lemon Cash Mini App SDK
 - **Farcaster**: Seamless Warpcast Mini App experience
 - One codebase, three wallet experiences
 
 ### 💳 Smart Group Management
+
 - Create groups (cakes) with 2+ members
 - Weighted expense splitting (equal or custom ratios)
 - Multiple payers per expense
@@ -48,12 +50,14 @@ CakePay is a **decentralized bill-splitting dApp** that makes group expense mana
 - Democratic voting to disable groups
 
 ### ⛓️ Blockchain-First Architecture
+
 - **On-Chain**: Core financial data, balances, and settlements
 - **Off-Chain**: Extended metadata, descriptions, and receipts
 - User ID system for gas-efficient storage
 - Batched transactions to minimize gas costs
 
 ### 🎨 Beautiful UX
+
 - Pixel-art inspired design
 - Real-time balance calculations
 - Pending vs settled expense tracking
@@ -109,6 +113,7 @@ CakePay follows a **hybrid on-chain/off-chain architecture** optimized for both 
 ### Data Flow
 
 **Creating a Cake:**
+
 1. User fills form with group details → Frontend
 2. Validates all members are registered on-chain → Smart Contract Query
 3. Submits transaction via wallet → Smart Contract Write
@@ -116,6 +121,7 @@ CakePay follows a **hybrid on-chain/off-chain architecture** optimized for both 
 5. Metadata saved → Database
 
 **Adding Expenses:**
+
 1. User adds expense (off-chain) → Database (pending status)
 2. Multiple expenses accumulate → Database
 3. User clicks "Submit on-chain" → Smart Contract (batched)
@@ -189,12 +195,14 @@ Visit `http://localhost:3000` to see the app!
 ## 📦 Technology Stack
 
 ### Smart Contracts
+
 - **Solidity 0.8.24**: Latest secure Solidity version
 - **Hardhat**: Development framework
 - **Hardhat Ignition**: Deployment system
 - **Slither**: Security analysis (mandatory in CI)
 
 ### Frontend
+
 - **Next.js 14**: App Router with Server Components
 - **React 18**: Modern React with hooks
 - **TypeScript**: Full type safety
@@ -206,6 +214,7 @@ Visit `http://localhost:3000` to see the app!
 - **Tailwind CSS**: Utility-first styling
 
 ### Infrastructure
+
 - **Supabase**: PostgreSQL database
 - **Vercel**: Frontend hosting (recommended)
 - **Tenderly**: RPC provider + debugging
@@ -271,6 +280,7 @@ The core contract managing all financial logic.
 #### Key Data Structures
 
 **Cake (Group)**
+
 ```solidity
 struct Cake {
     uint64 createdAt;
@@ -287,6 +297,7 @@ struct Cake {
 ```
 
 **BatchedCakeIngredients (Expense)**
+
 ```solidity
 struct BatchedCakeIngredients {
     uint64 createdAt;
@@ -298,14 +309,14 @@ struct BatchedCakeIngredients {
 
 #### Core Functions
 
-| Function | Description | Gas Optimization |
-|----------|-------------|------------------|
-| `registerUser(address)` | Register wallet and get user ID | One-time per user |
-| `createCake(...)` | Create new group | User IDs instead of addresses |
-| `addBatchedCakeIngredients(...)` | Add expenses batch | Multiple expenses in one tx |
-| `cutCake(uint128)` | Update balances | Processes all pending ingredients |
-| `payCakeSlice(uint128)` | Pay what you owe | Direct balance update |
-| `claimCakeSlice(uint128)` | Claim what you're owed | Transfers funds to caller |
+| Function                         | Description                     | Gas Optimization                  |
+| -------------------------------- | ------------------------------- | --------------------------------- |
+| `registerUser(address)`          | Register wallet and get user ID | One-time per user                 |
+| `createCake(...)`                | Create new group                | User IDs instead of addresses     |
+| `addBatchedCakeIngredients(...)` | Add expenses batch              | Multiple expenses in one tx       |
+| `cutCake(uint128)`               | Update balances                 | Processes all pending ingredients |
+| `payCakeSlice(uint128)`          | Pay what you owe                | Direct balance update             |
+| `claimCakeSlice(uint128)`        | Claim what you're owed          | Transfers funds to caller         |
 
 ---
 
@@ -314,6 +325,7 @@ struct BatchedCakeIngredients {
 ### Environment Variables
 
 **Frontend (`frontend/.env.local`)**
+
 ```env
 # Contract Deployment
 NEXT_PUBLIC_CONTRACT_ADDRESS_ETH_SEPOLIA=0x...
@@ -331,6 +343,7 @@ NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
 ```
 
 **Contracts (`hardhat/.env`)**
+
 ```env
 SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/...
 SEPOLIA_PRIVATE_KEY=0x...
@@ -471,6 +484,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Built by [Rather Labs](https://www.ratherlabs.com/)** - A leading blockchain development studio specializing in Web3 applications, smart contracts, and decentralized systems.
 
 **Powered by:**
+
 - [Lemon Cash](https://www.lemon.me/) - Crypto banking made simple
 - [Farcaster](https://www.farcaster.xyz/) - Decentralized social protocol
 - [Ethereum](https://ethereum.org/) - World computer
