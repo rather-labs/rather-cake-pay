@@ -1,0 +1,19 @@
+{
+  "miniapp": {
+    "version": "1",
+    "name": "CakePay",
+    "iconUrl": "https://your-domain.com/cake-icon.jpg",
+    "homeUrl": "https://your-domain.com",
+    "imageUrl": "https://your-domain.com/og-image.jpg",
+    "buttonTitle": "Open CakePay",
+    "splashImageUrl": "https://your-domain.com/cake-icon.jpg",
+    "splashBackgroundColor": "#ffffff",
+    "requiredChains": [
+      "eip155:1",
+      "eip155:11155111"
+    ],
+    "requiredCapabilities": [
+      "wallet.getEthereumProvider"
+    ]
+  }
+}
