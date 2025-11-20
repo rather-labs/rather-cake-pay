@@ -39,6 +39,25 @@ $ forge fmt
 $ forge snapshot
 ```
 
+## Setting Up Dependencies
+
+To compile and run the project, you need to install the required libraries. Use the following commands to clone the necessary dependencies:
+
+```shell
+# Clone Uniswap and OpenZeppelin libraries
+$ git clone --recurse-submodules https://github.com/Uniswap/universal-router lib/universal-router
+$ git clone --recurse-submodules https://github.com/Uniswap/v4-core lib/v4-core
+$ git clone --recurse-submodules https://github.com/Uniswap/v4-periphery lib/v4-periphery
+$ git clone --recurse-submodules https://github.com/Uniswap/permit2 lib/permit2
+$ git clone --recurse-submodules https://github.com/OpenZeppelin/openzeppelin-contracts lib/openzeppelin-contracts
+$ git clone --recurse-submodules https://github.com/Uniswap/v2-core lib/v2-core
+$ git clone --recurse-submodules https://github.com/Uniswap/v3-core lib/v3-core
+
+# Clean and build the project
+$ forge clean
+$ forge build
+```
+
 ### Anvil
 
 ```shell

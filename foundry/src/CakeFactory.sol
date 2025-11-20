@@ -480,7 +480,7 @@ contract CakeFactory is Ownable, ReentrancyGuard {
      * @param cakeId The ID of the cake
      * @param token The token to claim in
      */
-    function claimCakeSlice(uint128 cakeId, IERC20 token) public nonReentrant {
+    function claimCakeSlice(uint128 cakeId, IERC20 token) public payable nonReentrant {
         require(userIds[msg.sender] != 0, "User not registered");
         
         int256 userBalance = cakes[cakeId].currentBalances[userIds[msg.sender]];
