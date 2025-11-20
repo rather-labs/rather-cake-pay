@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ArrowLeft, Plus, Users, Calendar, Utensils, X, Trophy, Medal, Award, Lock, Upload, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { createClient } from '@/lib/supabase/client'
@@ -682,9 +683,16 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                     href={`/user/${member.id}`}
                     className="flex flex-col items-center gap-1 group"
                   >
-                    <div className="w-12 h-12 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl hover:scale-110 transition-transform cursor-pointer group-hover:border-2 group-hover:border-[#FF69B4]">
+                    <div className="w-12 h-12 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl hover:scale-110 transition-transform cursor-pointer group-hover:border-2 group-hover:border-[#FF69B4] overflow-hidden rounded">
                       {member.avatar_url ? (
-                        <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                        <Image
+                          src={member.avatar_url}
+                          alt={member.username}
+                          width={48}
+                          height={48}
+                          className="h-full w-full object-cover"
+                          unoptimized
+                        />
                       ) : (
                         <span>{member.username.charAt(0).toUpperCase()}</span>
                       )}
@@ -847,9 +855,16 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                         {index === 2 && <Award className="w-6 h-6 text-[#CD7F32]" />}
                       </div>
                       
-                      <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl group-hover:border-2 group-hover:border-[#FF69B4] transition-all">
+                      <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl group-hover:border-2 group-hover:border-[#FF69B4] transition-all overflow-hidden rounded">
                         {member.avatar_url ? (
-                          <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                          <Image
+                            src={member.avatar_url}
+                            alt={member.username}
+                            width={48}
+                            height={48}
+                            className="h-full w-full object-cover"
+                            unoptimized
+                          />
                         ) : (
                           <span>{member.username.charAt(0).toUpperCase()}</span>
                         )}
@@ -1101,9 +1116,16 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                                 <span className="text-white text-xs">✓</span>
                               )}
                             </div>
-                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg">
+                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg overflow-hidden rounded">
                               {member.avatar_url ? (
-                                <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                                <Image
+                                  src={member.avatar_url}
+                                  alt={member.username}
+                                  width={32}
+                                  height={32}
+                                  className="h-full w-full object-cover"
+                                  unoptimized
+                                />
                               ) : (
                                 <span>{member.username.charAt(0).toUpperCase()}</span>
                               )}
@@ -1232,9 +1254,16 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                                 <span className="text-white text-xs">✓</span>
                               )}
                             </div>
-                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg">
+                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg overflow-hidden rounded">
                               {member.avatar_url ? (
-                                <img src={member.avatar_url} alt={member.username} className="w-full h-full rounded" />
+                                <Image
+                                  src={member.avatar_url}
+                                  alt={member.username}
+                                  width={32}
+                                  height={32}
+                                  className="h-full w-full object-cover"
+                                  unoptimized
+                                />
                               ) : (
                                 <span>{member.username.charAt(0).toUpperCase()}</span>
                               )}

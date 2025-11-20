@@ -92,8 +92,8 @@ export const farcasterClient = {
    * Call this when your app has finished loading and is ready to display.
    * This dismisses any splash screen shown by the host app.
    */
-  ready: () => {
-    sdk.actions.ready()
+  ready: async () => {
+    await sdk.actions.ready()
   },
 
   /**

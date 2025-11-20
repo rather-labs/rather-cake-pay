@@ -11,6 +11,7 @@ import { useUserContext } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
 import { UsersAPI } from '@/lib/api/users';
 import Link from 'next/link';
+import Image from 'next/image';
 import { formatAddress } from '@/lib/utils/format';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
@@ -232,10 +233,13 @@ export default function RegisterPage() {
                     </p>
                     {avatarUrl && (
                       <div className="mt-2 flex items-center gap-2">
-                        <img
+                        <Image
                           src={avatarUrl}
                           alt="Avatar preview"
-                          className="w-12 h-12 rounded-full border-2 border-[#FFB6D9] object-cover"
+                          width={48}
+                          height={48}
+                          className="rounded-full border-2 border-[#FFB6D9] object-cover"
+                          unoptimized
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                           }}

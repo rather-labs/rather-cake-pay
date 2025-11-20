@@ -2,8 +2,9 @@
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { ArrowLeft, Users, DollarSign, Calendar, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Users, DollarSign, Calendar, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { createClient } from '@/lib/supabase/client'
@@ -11,7 +12,6 @@ import { CakesAPI } from '@/lib/api/cakes'
 import { IngredientsAPI } from '@/lib/api/ingredients'
 import { UsersAPI } from '@/lib/api/users'
 import { useCurrentUser } from '@/hooks/use-current-user'
-import { ICON_OPTIONS } from '@/lib/constants'
 import type { Cake, CakeIngredient, User } from '@/types/database'
 
 type ParticipantWithWeight = {
@@ -149,13 +149,6 @@ export default function ExpenseDetailPage({ params }: { params: { groupId: strin
     fetchExpenseData()
   }, [groupId, expenseId, currentUser])
 
-  const getIconFromIndex = (index: number | null) => {
-    if (index === null || index < 0 || index >= ICON_OPTIONS.length) {
-      return ICON_OPTIONS[0]
-    }
-    return ICON_OPTIONS[index]
-  }
-
   // Check if custom weights were used (not all weights are equal to 1)
   const usesCustomWeights = expense?.weights && participants.length > 0
     ? !participants.every(p => p.weight === 1)
@@ -223,8 +216,6 @@ export default function ExpenseDetailPage({ params }: { params: { groupId: strin
       </div>
     )
   }
-
-  const cakeIcon = getIconFromIndex(cake.icon_index)
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#F0F9F4] to-[#FFF9E5]">
@@ -314,9 +305,16 @@ export default function ExpenseDetailPage({ params }: { params: { groupId: strin
                   className="flex items-center justify-between p-3 bg-[#FFB6D9]/10 rounded border-2 border-[#FFB6D9]"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-lg">
+                    <div className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-lg overflow-hidden rounded">
                       {payer.user.avatar_url ? (
-                        <img src={payer.user.avatar_url} alt={payer.user.username} className="w-full h-full rounded" />
+                        <Image
+                          src={payer.user.avatar_url}
+                          alt={payer.user.username}
+                          width={40}
+                          height={40}
+                          className="h-full w-full object-cover"
+                          unoptimized
+                        />
                       ) : (
                         <span>{payer.user.username.charAt(0).toUpperCase()}</span>
                       )}
@@ -363,9 +361,16 @@ export default function ExpenseDetailPage({ params }: { params: { groupId: strin
                     className="flex items-center justify-between p-3 bg-[#B4E7CE]/10 rounded border-2 border-[#B4E7CE]"
                   >
                     <div className="flex items-center gap-3 flex-1">
-                      <div className="w-10 h-10 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg">
+                      <div className="w-10 h-10 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg overflow-hidden rounded">
                         {participant.user.avatar_url ? (
-                          <img src={participant.user.avatar_url} alt={participant.user.username} className="w-full h-full rounded" />
+                          <Image
+                            src={participant.user.avatar_url}
+                            alt={participant.user.username}
+                            width={40}
+                            height={40}
+                            className="h-full w-full object-cover"
+                            unoptimized
+                          />
                         ) : (
                           <span>{participant.user.username.charAt(0).toUpperCase()}</span>
                         )}
@@ -446,4 +451,3 @@ export default function ExpenseDetailPage({ params }: { params: { groupId: strin
     </div>
   )
 }
-

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   farcasterClient,
   type FarcasterAuthToken,
@@ -65,6 +65,19 @@ export function useFarcasterWallet(): UseFarcasterWalletReturn {
   const [context, setContext] = useState<FarcasterContext | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isInMiniApp, setIsInMiniApp] = useState(false)
+  const readySignaledRef = useRef(false)
+
+  const signalReady = useCallback(async () => {
+    if (readySignaledRef.current) {
+      return
+    }
+    try {
+      await farcasterClient.ready()
+      readySignaledRef.current = true
+    } catch (error) {
+      console.error('Failed to signal Farcaster ready state:', error)
+    }
+  }, [])
 
   // Detect Farcaster Mini App environment on mount
   useEffect(() => {
@@ -72,23 +85,27 @@ export function useFarcasterWallet(): UseFarcasterWalletReturn {
       const inMiniApp = await farcasterClient.isInMiniApp()
       setIsInMiniApp(inMiniApp)
 
-      // If in Mini App, automatically get context
-      if (inMiniApp) {
-        try {
-          const ctx = await farcasterClient.getContext()
-          setContext(ctx)
-          // Extract FID from context
-          if (ctx.user?.fid) {
-            setFid(ctx.user.fid)
-          }
-        } catch (error) {
-          console.error('Failed to get Farcaster context:', error)
-        }
+      if (!inMiniApp) {
+        return
       }
+
+      // If in Mini App, automatically get context
+      try {
+        const ctx = await farcasterClient.getContext()
+        setContext(ctx)
+        // Extract FID from context
+        if (ctx.user?.fid) {
+          setFid(ctx.user.fid)
+        }
+      } catch (error) {
+        console.error('Failed to get Farcaster context:', error)
+      }
+
+      await signalReady()
     }
 
     checkEnvironment()
-  }, [])
+  }, [signalReady])
 
   /**
    * Authenticate with Farcaster and connect Ethereum wallet
@@ -116,15 +133,14 @@ export function useFarcasterWallet(): UseFarcasterWalletReturn {
         }
       }
 
-      // Signal app is ready
-      farcasterClient.ready()
+      await signalReady()
     } catch (error) {
       console.error('Farcaster wallet connection failed:', error)
       throw error
     } finally {
       setIsLoading(false)
     }
-  }, [isInMiniApp])
+  }, [isInMiniApp, signalReady])
 
   /**
    * Clear wallet connection state

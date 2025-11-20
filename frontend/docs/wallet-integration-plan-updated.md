@@ -394,6 +394,8 @@ export function useFarcasterWallet() {
 }
 ```
 
+> ✅ **Ready handshake guard**: The hook now calls `sdk.actions.ready()` as soon as it detects the Farcaster Mini App environment (and guards against duplicate calls). This prevents the Warpcast preview warning about "`sdk.actions.ready()` not called" while still allowing subsequent manual connections to reuse the same handshake.
+
 #### 2.3 Create Farcaster Manifest
 
 **File**: `public/.well-known/farcaster.json`

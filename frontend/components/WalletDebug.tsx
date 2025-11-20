@@ -7,6 +7,10 @@ import { useLemonWallet } from '@/hooks/use-lemon-wallet'
 import { useFarcasterWallet } from '@/hooks/use-farcaster-wallet'
 import { formatAddress } from '@/lib/utils/format'
 
+type ReactNativeWindow = Window & {
+  ReactNativeWebView?: unknown
+}
+
 export function WalletDebug() {
   const [mounted, setMounted] = useState(false)
   const [isExpanded, setIsExpanded] = useState(true)
@@ -22,6 +26,10 @@ export function WalletDebug() {
   if (!mounted) {
     return null
   }
+
+  const hasReactNativeWebView =
+    typeof window !== 'undefined' &&
+    Boolean((window as ReactNativeWindow).ReactNativeWebView)
 
   // Collapsed view - just a small toggle button
   if (!isExpanded) {
@@ -85,7 +93,7 @@ export function WalletDebug() {
         </div>
 
         <div className="border-t border-gray-600 my-2 pt-2">
-          <div>window.ReactNativeWebView: {typeof window !== 'undefined' && (window as any).ReactNativeWebView ? '✅ EXISTS' : '❌ NONE'}</div>
+          <div>window.ReactNativeWebView: {hasReactNativeWebView ? '✅ EXISTS' : '❌ NONE'}</div>
         </div>
 
         {walletType === WalletType.LEMON && (
