@@ -1,397 +1,486 @@
-# Rather Cake Pay
+<div align="center">
 
-A decentralized bill splitting application that allows groups of people to split cake ingredients and manage payments on-chain.
+# 🍰 CakePay
 
-## Overview
+### Split Bills Like Slicing Cake - Simple, Sweet, On-Chain
 
-Rather Cake Pay enables users to:
-- Create groups (called "cakes") with multiple members
-- Add expenses (called "cake ingredients") to groups
-  - Periodically recurring expenses
-- Split bills automatically among group members
-- Track and settle payments on-chain (i.e. cut the cake)
-- Manage group cake ingredients transparently
-- Manage groups in a single token
-  - Provide integration with swap protocols to allow payments in any token
+**Built with ❤️ by [Rather Labs](https://www.ratherlabs.com/)**
 
-## Deployment
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.24-blue)](https://soliditylang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
+
+[Live Demo](#) • [Documentation](#key-features) • [Contributing](#contributing)
+
+</div>
+
+---
+
+## 🎯 What is CakePay?
+
+CakePay is a **decentralized bill-splitting dApp** that makes group expense management as easy as slicing cake. Whether you're splitting rent with roommates, managing team dinners, or tracking shared subscriptions, CakePay provides a transparent, blockchain-powered solution that works seamlessly across **Web3 wallets**, **Lemon Cash**, and **Farcaster Mini Apps**.
+
+### Why CakePay?
+
+- 🎂 **Create "Cakes"**: Group multiple people together for ongoing shared expenses
+- 🥧 **Add "Ingredients"**: Track expenses with custom splits and multiple payers
+- 🔪 **Cut the Cake**: Batch submit expenses on-chain to update balances
+- 💰 **Settle Up**: Pay what you owe or claim what you're owed with transparent on-chain settlement
+- 📊 **Track Everything**: Real-time balance updates with complete transaction history
+- 🔐 **Trustless & Transparent**: All financial logic lives on the blockchain
+
+---
+
+## ✨ Key Features
+
+### 🏢 Multi-Platform Support
+- **Standard Web3**: Full Wagmi + RainbowKit integration
+- **Lemon Cash**: Native integration with Lemon Cash Mini App SDK
+- **Farcaster**: Seamless Warpcast Mini App experience
+- One codebase, three wallet experiences
+
+### 💳 Smart Group Management
+- Create groups (cakes) with 2+ members
+- Weighted expense splitting (equal or custom ratios)
+- Multiple payers per expense
+- Configurable interest rates for late payments
+- Democratic voting to disable groups
+
+### ⛓️ Blockchain-First Architecture
+- **On-Chain**: Core financial data, balances, and settlements
+- **Off-Chain**: Extended metadata, descriptions, and receipts
+- User ID system for gas-efficient storage
+- Batched transactions to minimize gas costs
+
+### 🎨 Beautiful UX
+- Pixel-art inspired design
+- Real-time balance calculations
+- Pending vs settled expense tracking
+- Member leaderboards showing who's owed the most
+- Mobile-first responsive design
+
+---
+
+## 🏗️ Architecture Overview
+
+CakePay follows a **hybrid on-chain/off-chain architecture** optimized for both security and user experience:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     CakePay Architecture                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │           Frontend Layer (Next.js 14)               │   │
+│  │                                                       │   │
+│  │  • Wagmi/RainbowKit (Standard Web3)                 │   │
+│  │  • Lemon Cash Mini App SDK                          │   │
+│  │  • Farcaster/Warpcast SDK                           │   │
+│  │  • Server Components (Database APIs)                │   │
+│  │  • Client Components (Wallet Interactions)          │   │
+│  └────────────────────┬────────────────────────────────┘   │
+│                       │                                      │
+│  ┌────────────────────┴──────────────────────────────────┐ │
+│  │         Smart Contract Layer (Ethereum/L2s)          │ │
+│  │                                                        │ │
+│  │  CakeFactory.sol                                      │ │
+│  │  • User ID Mapping (address → uint64)                │ │
+│  │  • Cake Management (groups, members, weights)        │ │
+│  │  • Batched Ingredients (expenses with payers)        │ │
+│  │  • Balance Tracking (int256[] per cake)              │ │
+│  │  • Settlement System (pay/claim functions)           │ │
+│  │  • Interest Accrual (configurable rates)             │ │
+│  │  • Voting System (disable inactive cakes)            │ │
+│  └────────────────────┬──────────────────────────────────┘ │
+│                       │                                      │
+│  ┌────────────────────┴──────────────────────────────────┐ │
+│  │           Data Layer (Supabase)                       │ │
+│  │                                                        │ │
+│  │  • User Profiles (username, avatar)                  │ │
+│  │  • Cake Metadata (name, description, icon)           │ │
+│  │  • Ingredient Details (name, description, receipts)  │ │
+│  │  • Status Tracking (pending, submitted, settled)     │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
+
+**Creating a Cake:**
+1. User fills form with group details → Frontend
+2. Validates all members are registered on-chain → Smart Contract Query
+3. Submits transaction via wallet → Smart Contract Write
+4. Event emitted → Frontend listens
+5. Metadata saved → Database
+
+**Adding Expenses:**
+1. User adds expense (off-chain) → Database (pending status)
+2. Multiple expenses accumulate → Database
+3. User clicks "Submit on-chain" → Smart Contract (batched)
+4. Balances updated → Smart Contract
+5. Status updated to "submitted" → Database
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+- Node.js 18+
+- npm or yarn
+- MetaMask or other Web3 wallet
+- (Optional) Lemon Cash app for mini-app testing
+- (Optional) Warpcast for Farcaster integration
 
-2. Set up environment variables:
-   - Create a `.env` file in the `hardhat/` directory based on `.env.example`.
-   - Example:
-     ```env
-     SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID
-     SEPOLIA_PRIVATE_KEY=YOUR_PRIVATE_KEY
-     BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
-     BASE_SEPOLIA_PRIVATE_KEY=YOUR_PRIVATE_KEY
-     ETHERSCAN_API_KEY=YOUR_ETHERSCAN_API_KEY
-     BASESCAN_API_KEY=YOUR_BASESCAN_API_KEY
-     ```
+### Installation
 
-### Deployment Steps
+```bash
+# Clone the repository
+git clone https://github.com/rather-labs/rather-cake-pay.git
+cd rather-cake-pay
 
-1. Start a local Hardhat node:
-   ```bash
-   npm run node
-   ```
+# Install smart contract dependencies
+cd hardhat
+npm install
 
-2. Deploy contracts:
-   - **Localhost**:
-     ```bash
-     npm run deploy:localhost
-     ```
-   - **Sepolia**:
-     ```bash
-     npm run deploy:sepolia
-     ```
-   - **Base Sepolia**:
-     ```bash
-     npm run deploy:base-sepolia
-     ```
-
-3. Verify deployment:
-   - Check the `frontend/public/contract/` directory for the ABI and deployment metadata.
-   - Ensure the `.env.example` file in the frontend is updated with the deployed contract address.
-
-## Architecture
-
-Rather Cake Pay follows a decentralized architecture with three main layers:
-
-### System Layers
-
-1. **Smart Contract Layer (Blockchain)**
-   - **CakeFactory.sol**: Core on-chain contract managing cakes and cake ingredients
-   - Handles user ID mapping, group membership, expense tracking and payment settlements
-   - Provides immutable audit trail for all transactions
-   - Supports multi-token payments through token address configuration per cake
-
-2. **Frontend Layer (Next.js Application)**
-   - Miniapp framework integration (Lemon, Farcaster)
-   - Blockchain interaction and wallet connectivity
-   - Server-side components for database management and API routes (can be on backend)
-   - Client-side components for user interface and wallet interactions
-
-3. **Data Layer**
-   - **On-chain**: Core financial and structural data (Cake, BatchedCakeIngredients structs with balances, weights, payment status)
-   - **Off-chain Database**: Extended metadata (descriptions, timestamps, user contact information, batching of expenses (cake ingredients)) for enhanced UX
-   - Synchronized data model between on-chain and off-chain storage
-
-4. **Backend**
-    - Optional, can be next.js server side componentts.
-    - Database handling 
-    - Batching expenses
-
-
-## Key Components
-
-- **Cake (Group)**: Represents a bill-splitting group with members, token configuration, current balances, and voting system for disabling
-- **Batched Cake Ingredients (Expenses)**: Batched expenses within a cake with weighted payment distribution and payer tracking
-- **User Management**: Address-to-ID mapping system for efficient on-chain storage and cross-cake user tracking
-- **Cake Cutting**: Batch processing of all pending ingredients to update member balances
-- **Payment System**: Members can pay their owed amounts or claim amounts owed to them
-- **Interest System**: Configurable interest rates per cake for unpaid amounts to incentivize timely settlements
-- **Voting System**: Members can vote to disable a cake (requires majority vote)
-
-## Technology Stack
-
-- **Blockchain**: Solidity 0.8.24, Hardhat, Hardhat Ignition
-- **Frontend**: Next.js 14, React 18, TypeScript, Ethers.js 6
-- **Development**: Hardhat for contract development and testing
-
-## Database Data Structures
-
-The off-chain database stores extended metadata that complements on-chain data. The following structures represent the database schema:
-
-### User
-
-```typescript
-{
-  id: number;                     // Unique database ID - The same that is used on-chain
-  address: string;                // Ethereum wallet address (unique)
-  displayName?: string;           // User-friendly display name (Lemon/Farcaster Id?)
-  avatar?: string;                // Avatar image URL
-  createdAt: timestamp;           // Account creation timestamp
-}
+# Install frontend dependencies
+cd ../frontend
+npm install
 ```
 
-### Cake (Group)
+### Smart Contract Deployment
 
-```typescript
-{
-  id: string;                    // Unique database ID - The same that is used on-chain
-  name: string;                  // Cake/group name
-  description?: string;          // Extended description
-  imageUrl?: string;             // Group image/icon URL
-  category?: string;             // Category/tag for organization
-  token: string;                 // Token contract address (0x0 for native ETH)
-  interestRate: number;         // Interest rate to be added to unpaid amounts
-  lastCutAt: number;             // Timestamp of last cake cut (uint64)
-  lastAddedIngredient: number;   // Last added ingredient ID (uint128)
-  memberIds: number[];           // Array of user IDs (uint64[])
-  currentBalances: string[];     // Current balances per member (uint256[])
-  createdAt: timestamp;          // Database record creation timestamp
-  updatedAt: timestamp;          // Last update timestamp
-}
+```bash
+cd hardhat
+
+# Compile contracts
+npm run compile
+
+# Deploy to local network
+npm run node          # Terminal 1
+npm run deploy:local  # Terminal 2
+
+# Deploy to Sepolia testnet
+npm run deploy:sepolia
+
+# Deploy to Base Sepolia
+npm run deploy:base-sepolia
 ```
 
-### Cake Ingredient (Expense)
+### Frontend Setup
 
-```typescript
-{
-  id: string;                     // Unique database ID
-  batchedIngredientsId?: string;  // On-chain ingredient ID (if batched and submitted)
-  cakeId: string;                 // Associated cake ID
-  name: string;                   // Ingredient/expense name
-  description?: string;           // Extended description
-  weights: number[];              // Payment weights per member (uint8[])
-  payerIds: number[];             // Ids of payers
-  amounts: number[];              // amount paid by each payer (uint256 as string)
-  receiptUrl?: string;            // URL to uploaded receipt image
-  status: 'pending' | 'submitted' | 'settled';  // Submission status
-  createdAt: timestamp;          // Expense creation timestamp
-  submittedAt?: timestamp;       // Blockchain submission timestamp
-  settledAt?: timestamp;         // Settlement completion timestamp
-}
+```bash
+cd frontend
+
+# Configure environment variables
+cp .env.example .env.local
+# Edit .env.local with your values
+
+# Run development server
+npm run dev
 ```
 
-### Receipt
+Visit `http://localhost:3000` to see the app!
 
-```typescript
-{
-  id: string;                     // Unique receipt ID
-  ingredientId: string;           // Associated ingredient ID
-  url: string;                    // Storage URL for receipt image
-  uploadedAt: timestamp;         // Upload timestamp
-}
+---
+
+## 📦 Technology Stack
+
+### Smart Contracts
+- **Solidity 0.8.24**: Latest secure Solidity version
+- **Hardhat**: Development framework
+- **Hardhat Ignition**: Deployment system
+- **Slither**: Security analysis (mandatory in CI)
+
+### Frontend
+- **Next.js 14**: App Router with Server Components
+- **React 18**: Modern React with hooks
+- **TypeScript**: Full type safety
+- **Wagmi**: Ethereum interactions
+- **RainbowKit**: Wallet connection UI
+- **Viem**: Low-level Ethereum library
+- **Lemon Cash SDK**: Mini-app integration
+- **Farcaster SDK**: Warpcast mini-app support
+- **Tailwind CSS**: Utility-first styling
+
+### Infrastructure
+- **Supabase**: PostgreSQL database
+- **Vercel**: Frontend hosting (recommended)
+- **Tenderly**: RPC provider + debugging
+
+---
+
+## 🎮 User Flows
+
+### 1️⃣ Registration Flow
+
+```
+User connects wallet
+  → Checks if registered on-chain
+  → If not: Transaction to register (gets user ID)
+  → Saves profile to database
+  → Redirects to dashboard
 ```
 
-## Smart Contract Structures and Functions
+### 2️⃣ Creating a Cake (Group)
 
-### Contract: CakeFactory.sol
+```
+User clicks "Create Group"
+  → Fills form (name, members, interest rate)
+  → System validates all members registered on-chain
+  → Transaction sent to create cake
+  → On-chain user IDs used (not wallet addresses)
+  → Cake metadata saved to database
+  → User redirected to cake page
+```
 
-The `CakeFactory` contract manages cake groups, assigns deterministic user IDs, batches expenses, accrues interest, and cuts cakes on-chain. It is the single source of truth for the core financial mechanics that the frontend and backend mirror.
+### 3️⃣ Adding Expenses
 
-#### Data Structures
+```
+User clicks "Add Expense"
+  → Fills form (name, amount, payers, split)
+  → Expense saved to database (status: pending)
+  → User can add multiple expenses
+  → When ready: "Submit on-chain" button
+  → Batches all pending expenses
+  → Single transaction updates balances
+  → Status changes to "submitted"
+```
 
-**Cake Struct**
+### 4️⃣ Settling Up
+
+```
+User views their balance
+  → If positive (owed): Click "Claim"
+  → If negative (owes): Click "Pay"
+  → Transaction sent with exact amount
+  → Balance updated on-chain
+  → UI reflects new balance
+```
+
+---
+
+## 🏛️ Smart Contract Details
+
+### CakeFactory.sol
+
+The core contract managing all financial logic.
+
+#### Key Data Structures
+
+**Cake (Group)**
 ```solidity
 struct Cake {
-    uint64 createdAt;                   // Timestamp of cake creation (64-bit, valid until 2106)
-    uint64 lastCutAt;                   // Timestamp of last cake cut (64-bit, valid until 2106)
-    uint64 lastCutBatchedIngredientsId; // ID of last ingredients included in a cut
-    uint128 latestIngredientId;         // Counter for the last submitted ingredient
-    uint64 billingPeriod;               // Expected cadence between cuts
-    uint64 nextDueAt;                   // Deadline for the next billing period
-    uint16 interestRate;                // Interest rate for unpaid amounts (in basis points)
-    bool active;                        // Whether the cake is active (voting can disable it)
-    address token;                      // Token contract address (0x0 for native ETH)
-    bool[] votesToDisable;              // Votes collected to disable the cake
-    uint64[] memberIds;                 // Array of user IDs in the cake
-    uint16[] memberWeights;             // Weight per member (same order as memberIds, sum = 10,000)
-    int256[] currentBalances;           // Running balances per member
+    uint64 createdAt;
+    uint64 lastCutAt;
+    uint64 lastCutBatchedIngredientsId;
+    uint16 interestRate;
+    bool active;
+    address token;              // 0x0 for ETH
+    bool[] votesToDisable;
+    uint64[] memberIds;         // User IDs (not addresses)
+    uint16[] memberWeights;     // BPS (sum = 10000)
+    int256[] currentBalances;   // Positive = owes, negative = owed
 }
 ```
 
-**BatchedCakeIngredients Struct**
+**BatchedCakeIngredients (Expense)**
 ```solidity
 struct BatchedCakeIngredients {
-    uint64 createdAt;      // Timestamp of batched ingredients creation (64-bit, valid until 2106)
-    uint16[] weights;      // Payment weights per member (same order as Cake.memberIds)
-    uint64[] payerIds;     // User IDs of payers
-    uint256[] payedAmounts; // Amounts paid by each payer
+    uint64 createdAt;
+    uint16[] weights;           // Per-member split
+    uint64[] payerIds;          // Who paid
+    uint256[] payedAmounts;     // How much each paid
 }
 ```
 
-#### Storage Mappings
+#### Core Functions
 
-```solidity
-mapping(address => uint64) public userIds;                                   // Address ➜ user ID
-mapping(uint64 => address) public userAddresses;                             // User ID ➜ address
-mapping(uint128 => Cake) public cakes;                                       // Cake ID ➜ Cake data
-mapping(uint128 => mapping(uint64 => BatchedCakeIngredients)) public batchedIngredientsPerCake; // cake ➜ ingredient ID ➜ ingredient
-mapping(uint64 => mapping(uint128 => bool)) public userCakes;                // user ➜ cake participation flag
-mapping(uint64 => uint128[]) private userCakeIds;                            // cakes per user (viewed via getter)
-mapping(uint128 => mapping(uint64 => uint64)) public cakeMemberIndex;        // cake ➜ member ID ➜ index
+| Function | Description | Gas Optimization |
+|----------|-------------|------------------|
+| `registerUser(address)` | Register wallet and get user ID | One-time per user |
+| `createCake(...)` | Create new group | User IDs instead of addresses |
+| `addBatchedCakeIngredients(...)` | Add expenses batch | Multiple expenses in one tx |
+| `cutCake(uint128)` | Update balances | Processes all pending ingredients |
+| `payCakeSlice(uint128)` | Pay what you owe | Direct balance update |
+| `claimCakeSlice(uint128)` | Claim what you're owed | Transfers funds to caller |
 
-uint64 public totalUsers;                         // Count of registered users
-uint128 public totalCakes;                        // Count of cakes created
-uint128 public totalBatchedCakeIngredients;       // Count of batched ingredient records
+---
+
+## 🔧 Configuration
+
+### Environment Variables
+
+**Frontend (`frontend/.env.local`)**
+```env
+# Contract Deployment
+NEXT_PUBLIC_CONTRACT_ADDRESS_ETH_SEPOLIA=0x...
+NEXT_PUBLIC_CHAIN_ID=11155111
+
+# RPC
+NEXT_PUBLIC_RPC_URL=https://sepolia.gateway.tenderly.co
+
+# Database
+NEXT_PUBLIC_SUPABASE_URL=https://...supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+
+# Wallets
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
 ```
 
-#### Events
-```solidity
-event CakeCreated(uint128 indexed cakeId);
-event BatchedCakeIngredientsAdded(uint128 indexed batchedCakeIngredientsId, uint128 indexed cakeId);
-event CakeCutted(uint128 indexed cakeId);
+**Contracts (`hardhat/.env`)**
+```env
+SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/...
+SEPOLIA_PRIVATE_KEY=0x...
+ETHERSCAN_API_KEY=...
 ```
 
-#### Write Functions
+---
 
-**createCake**
-```solidity
-function createCake(address _token, uint64[] memory _memberIds, uint16 _interestRate) public returns (uint128)
-```
-- Creates a new cake (group) with specified token, members, and interest rate
-- Parameters:
-  - `_token`: Token contract address (0x0 for native ETH)
-  - `_memberIds`: Array of user IDs that will be members of the cake
-  - `_interestRate`: Interest rate for unpaid amounts in the cake
-- Returns the new cake ID (uint128)
-- Emits `CakeCreated` event
-- Note: Currently marked as TODO in implementation
+## 🧪 Testing
 
-**addBatchedCakeIngredients**
-```solidity
-function addBatchedCakeIngredients(
-    uint128 _cakeId,
-    uint8[] memory _weights,
-    uint64[] memory _payerIds,
-    uint256[] memory _payedAmounts
-) public returns (uint128)
-```
-- Adds a new batch of cake ingredients (expenses) to a cake
-- Parameters:
-  - `_cakeId`: The ID of the cake
-  - `_weights`: Array of payment weights per member (same order as Cake.memberIds)
-  - `_payerIds`: Array of user IDs that are payers
-  - `_payedAmounts`: Array of amounts that each payer paid
-- Returns the new batched ingredients ID (uint128)
-- Emits `BatchedCakeIngredientsAdded` event
-- Note: Currently marked as TODO in implementation
+### Smart Contracts
 
-**cutCake**
-```solidity
-function cutCake(uint128 _cakeId) public payable
-```
-- Cuts a cake and updates the balances of all members based on cumulative batched ingredients since last cut
-- Parameters:
-  - `_cakeId`: The ID of the cake to cut
-- Updates `currentBalances` for each member based on weights and paid amounts
-- Updates `lastCutAt` and `lastCutBatchedIngredientsId`
-- Emits `CakeCutted` event
-- Note: Currently marked as TODO in implementation
+```bash
+cd hardhat
 
-**voteToDisableCake**
-```solidity
-function voteToDisableCake(uint128 _cakeId, bool _vote) public
-```
-- Votes to disable or keep active a cake
-- Parameters:
-  - `_cakeId`: The ID of the cake
-  - `_vote`: True to vote to disable, false to vote to keep active
-- If half or more of the members vote to disable, the cake is disabled
-- Updates the `votesToDisable` array and `active` status
-- Note: Currently marked as TODO in implementation
+# Run tests
+npm test
 
-**payCakeSlice**
-```solidity
-function payCakeSlice(uint128 _cakeId) public payable
-```
-- Pays the amount owed by the caller to the cake
-- Parameters:
-  - `_cakeId`: The ID of the cake
-- Reduces the caller's balance in `currentBalances`
-- Note: Currently marked as TODO in implementation
+# Run with coverage
+npm run coverage
 
-**claimCakeSlice**
-```solidity
-function claimCakeSlice(uint128 _cakeId) public payable
-```
-- Claims the slice of the cake that the caller is owed (negative balance)
-- Parameters:
-  - `_cakeId`: The ID of the cake
-- Transfers funds to the caller if they have a negative balance (are owed money)
-- Note: Currently marked as TODO in implementation
-
-#### View Functions
-
-**isMember**
-```solidity
-function isMember(uint128 _cakeId, uint64 _memberId) public view returns (bool)
-```
-- Checks if a member ID is a member of a cake
-- Parameters:
-  - `_cakeId`: The ID of the cake
-  - `_memberId`: The ID of the member to check
-- Returns true if the member is a member of the cake
-- Note: Currently marked as TODO in implementation
-
-**getCakeDetails**
-```solidity
-function getCakeDetails(uint128 _cakeId) public view returns (
-    uint64[] memory memberIds,
-    uint256[] memory currentBalances,
-    uint16 interestRate,
-    bool active,
-    address token,
-    uint64 lastCutAt,
-    uint64 lastCutBatchedIngredientsId
-)
-```
-- Gets detailed information about a cake
-- Returns: member IDs, current balances, interest rate, active status, token address, last cut timestamp, and last cut batched ingredients ID
-
-**getCakeMembers**
-```solidity
-function getCakeMembers(uint128 _cakeId) public view returns (uint64[] memory)
-```
-- Gets all member IDs of a cake
-- Parameters:
-  - `_cakeId`: The ID of the cake
-- Returns array of user IDs (uint64), not addresses
-
-**getCakeIngredientDetails**
-```solidity
-function getCakeIngredientDetails(uint128 _cakeId, uint64 _cakeIngredientId) public view returns (
-    uint8[] memory weights,
-    uint64[] memory payerIds,
-    uint256[] memory payedAmounts
-)
-```
-- Gets detailed information about a batched cake ingredient
-- Parameters:
-  - `_cakeId`: ID of the cake
-  - `_cakeIngredientId`: ID of the batched ingredient 
-- Returns: weights, payer IDs, and paid amounts
-
-**getCakeMemberBalance**
-```solidity
-function getCakeMemberBalance(uint128 _cakeId, uint64 _memberId) public view returns (uint256)
-```
-- Gets the current balance of a specific member in a cake
-- Parameters:
-  - `_cakeId`: ID of the cake
-  - `_memberId`: ID of the member
-- Returns: Current balance (positive = owes money, negative = is owed money)
-
-
-## Project Structure
-
-```
-rather-cake-pay/
-├── hardhat/          # Smart contracts and deployment
-│   ├── contracts/    # Solidity contracts
-│   │   └── CakeFactory.sol  # Main contract for managing cakes and cake ingredients
-│   ├── ignition/     # Hardhat Ignition deployment modules
-│   ├── test/         # Contract tests
-│   └── ...
-├── frontend/         # TypeScript/Next.js full-stack application
-│   ├── app/          # Next.js app directory
-│   │   └── ...       # Frontend pages and components, server side database management
-│   └── ...
-└── README.md         # This file
+# Security analysis (mandatory)
+slither . --exclude-dependencies
 ```
 
-## TODOs
-- Add Integration to upload receipts 
+### Frontend
 
-## License
+```bash
+cd frontend
 
-MIT
+# Type check
+npx tsc --noEmit
+
+# Lint
+npm run lint
+
+# Format check
+npm run format:check
+
+# Build test
+npm run build
+```
+
+### CI/CD
+
+```bash
+# Test everything locally before pushing
+./scripts/test-ci.sh
+
+# Test only contracts
+./scripts/test-ci.sh contracts
+
+# Test only frontend
+./scripts/test-ci.sh frontend
+```
+
+---
+
+## 🛡️ Security
+
+### Smart Contract Security
+
+- **Slither Analysis**: Mandatory in CI pipeline
+- **OpenZeppelin Patterns**: Used where applicable
+- **Reentrancy Protection**: All external calls protected
+- **Integer Overflow**: Built-in Solidity 0.8+ checks
+- **Access Control**: Proper member validation
+
+### Best Practices
+
+1. Never commit private keys or secrets
+2. All contract changes require security review
+3. Slither must pass before merging
+4. Use established patterns (OpenZeppelin)
+5. Test edge cases thoroughly
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+### Development Workflow
+
+1. Fork the repository
+2. Create feature branch from `develop`
+3. Make your changes
+4. Run `./scripts/test-ci.sh` locally
+5. Submit PR to `develop` branch
+6. Wait for review and CI to pass
+
+### Commit Convention
+
+We follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat(contracts): add voting system
+fix(frontend): correct balance calculation
+docs(readme): update deployment steps
+```
+
+---
+
+## 📚 Additional Resources
+
+- **Smart Contracts**: See [hardhat/README.md](hardhat/README.md)
+- **Contributing Guide**: See [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Frontend API**: See [frontend/lib/api/](frontend/lib/api/)
+- **Database Schema**: See [Database Data Structures](#database-data-structures) section
+
+---
+
+## 🗺️ Roadmap
+
+- [x] Core smart contract implementation
+- [x] Multi-wallet support (Web3, Lemon, Farcaster)
+- [x] User registration system
+- [x] Cake creation and management
+- [x] Expense tracking and batching
+- [x] Balance calculation and settlement
+- [ ] Receipt upload integration
+- [ ] Token swaps for multi-currency payments
+- [ ] Recurring expense automation
+- [ ] Mobile app (React Native)
+- [ ] Advanced analytics dashboard
+- [ ] Social features (group chat, activity feed)
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+**Built by [Rather Labs](https://www.ratherlabs.com/)** - A leading blockchain development studio specializing in Web3 applications, smart contracts, and decentralized systems.
+
+**Powered by:**
+- [Lemon Cash](https://www.lemon.me/) - Crypto banking made simple
+- [Farcaster](https://www.farcaster.xyz/) - Decentralized social protocol
+- [Ethereum](https://ethereum.org/) - World computer
+
+---
+
+<div align="center">
+
+**Made with 🍰 by Rather Labs**
+
+[Website](https://www.ratherlabs.com/) • [Twitter](https://twitter.com/ratherlabs) • [LinkedIn](https://www.linkedin.com/company/rather-labs/)
+
+</div>
