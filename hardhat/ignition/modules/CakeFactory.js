@@ -64,7 +64,7 @@ const UNISWAP_V4_ADDRESSES = {
 module.exports = buildModule("CakeFactoryModule", (m) => {
   // Get network name from Hardhat Runtime Environment
   // The network name is available through the module's context
-  const networkName = process.env.HARDHAT_NETWORK || "localhost";
+  const networkName = "baseSepolia";
   
   // Get addresses for the current network, default to localhost if not found
   const addresses = UNISWAP_V4_ADDRESSES[networkName] || UNISWAP_V4_ADDRESSES.localhost;
