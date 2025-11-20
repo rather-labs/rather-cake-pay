@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ArrowLeft, Users, DollarSign, Calendar, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { createClient } from '@/lib/supabase/client'
@@ -304,9 +305,16 @@ export default function ExpenseDetailPage({ params }: { params: { groupId: strin
                   className="flex items-center justify-between p-3 bg-[#FFB6D9]/10 rounded border-2 border-[#FFB6D9]"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-lg">
+                    <div className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-lg overflow-hidden rounded">
                       {payer.user.avatar_url ? (
-                        <img src={payer.user.avatar_url} alt={payer.user.username} className="w-full h-full rounded" />
+                        <Image
+                          src={payer.user.avatar_url}
+                          alt={payer.user.username}
+                          width={40}
+                          height={40}
+                          className="h-full w-full object-cover"
+                          unoptimized
+                        />
                       ) : (
                         <span>{payer.user.username.charAt(0).toUpperCase()}</span>
                       )}
@@ -353,9 +361,16 @@ export default function ExpenseDetailPage({ params }: { params: { groupId: strin
                     className="flex items-center justify-between p-3 bg-[#B4E7CE]/10 rounded border-2 border-[#B4E7CE]"
                   >
                     <div className="flex items-center gap-3 flex-1">
-                      <div className="w-10 h-10 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg">
+                      <div className="w-10 h-10 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg overflow-hidden rounded">
                         {participant.user.avatar_url ? (
-                          <img src={participant.user.avatar_url} alt={participant.user.username} className="w-full h-full rounded" />
+                          <Image
+                            src={participant.user.avatar_url}
+                            alt={participant.user.username}
+                            width={40}
+                            height={40}
+                            className="h-full w-full object-cover"
+                            unoptimized
+                          />
                         ) : (
                           <span>{participant.user.username.charAt(0).toUpperCase()}</span>
                         )}
@@ -436,4 +451,3 @@ export default function ExpenseDetailPage({ params }: { params: { groupId: strin
     </div>
   )
 }
-

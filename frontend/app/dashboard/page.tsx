@@ -4,25 +4,27 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Plus, X } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useCakes } from '@/hooks/use-cakes';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { useUserContext } from '@/contexts/UserContext';
+import { useUserContext, WalletType } from '@/contexts/UserContext';
 import { ICON_OPTIONS } from '@/lib/constants';
 import { createCake } from '@/lib/actions/cakes';
 import { searchUsers } from '@/lib/actions/users';
 import type { User } from '@/types/database';
 import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
-
-import CakeFactoryArtifactAbi from '@/public/contracts/CakeFactory.json';
-
-export const CAKE_FACTORY_ABI = CakeFactoryArtifactAbi.abi;
-export const CONTRACT_ADDRESS_BASE_SEPOLIA = process.env
-  .NEXT_PUBLIC_CONTRACT_ADDRESS_BASE_SEPOLIA as `0x${string}`;
+import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory';
+import { lemonClient } from '@/lib/lemon/client';
+import { TransactionResult } from '@lemoncash/mini-app-sdk';
+import { useLemonWallet } from '@/hooks/use-lemon-wallet';
+import { useFarcasterWallet } from '@/hooks/use-farcaster-wallet';
+import { Header } from '@/components/Header';
 
 export default function Dashboard() {
-  const { walletAddress } = useUserContext();
+  const { walletAddress, walletType, isConnecting } = useUserContext();
+  const lemon = useLemonWallet();
+  const farcaster = useFarcasterWallet();
   const { user, loading: userLoading } = useCurrentUser();
   const { cakes, loading: cakesLoading, error, refresh } = useCakes(user?.id || 0);
 
@@ -45,13 +47,15 @@ export default function Dashboard() {
     hash,
   });
 
-  const [pendingGroupData, setPendingGroupData] = useState<{
+  type PendingGroupData = {
     name: string;
     description: string | null;
     iconIndex: number;
     creatorId: number;
     memberIds: number[];
-  } | null>(null);
+  };
+
+  const [pendingGroupData, setPendingGroupData] = useState<PendingGroupData | null>(null);
 
   useEffect(() => {
     if (writeError) {
@@ -62,57 +66,63 @@ export default function Dashboard() {
     }
   }, [writeError]);
 
+  const completeGroupCreation = useCallback(
+    async (txHash?: string, overrideData?: PendingGroupData | null) => {
+      const dataToPersist = overrideData ?? pendingGroupData;
+      if (!dataToPersist) {
+        return;
+      }
+
+      if (txHash) {
+        console.log('Transaction confirmed! Hash:', txHash);
+      }
+      console.log('Creating group in database...');
+
+      try {
+        const { data, error: dbError } = await createCake(
+          dataToPersist.name,
+          dataToPersist.description,
+          dataToPersist.iconIndex,
+          dataToPersist.creatorId,
+          dataToPersist.memberIds
+        );
+
+        if (dbError) {
+          setCreateError(dbError);
+          return;
+        }
+
+        if (data) {
+          setShowCreateModal(false);
+          setGroupName('');
+          setDescription('');
+          setSelectedIcon(ICON_OPTIONS[0]);
+          setSelectedMembers([]);
+          setMemberSearchQueries(['']);
+          setMemberSearchResults([[]]);
+          setShowMemberDropdowns([false]);
+          setToken('0x0000000000000000000000000000000000000000');
+          setInterestRate('0');
+          setCreateError(null);
+          setPendingGroupData(null);
+
+          await refresh();
+        }
+      } catch (error) {
+        console.error('Error creating group in database:', error);
+        setCreateError(error instanceof Error ? error.message : 'Failed to create group in database');
+      } finally {
+        setIsCreating(false);
+      }
+    },
+    [pendingGroupData, refresh]
+  );
+
   useEffect(() => {
     if (isConfirmed && hash && pendingGroupData) {
-      const completeGroupCreation = async () => {
-        console.log('Transaction confirmed! Hash:', hash);
-        console.log('Creating group in database...');
-
-        try {
-          const { data, error: dbError } = await createCake(
-            pendingGroupData.name,
-            pendingGroupData.description,
-            pendingGroupData.iconIndex,
-            pendingGroupData.creatorId,
-            pendingGroupData.memberIds
-          );
-
-          if (dbError) {
-            setCreateError(dbError);
-            return;
-          }
-
-          if (data) {
-            // Reset form and close modal
-            setShowCreateModal(false);
-            setGroupName('');
-            setDescription('');
-            setSelectedIcon(ICON_OPTIONS[0]);
-            setSelectedMembers([]);
-            setMemberSearchQueries(['']);
-            setMemberSearchResults([[]]);
-            setShowMemberDropdowns([false]);
-            setToken('0x0000000000000000000000000000000000000000');
-            setInterestRate('0');
-            setCreateError(null);
-            setPendingGroupData(null);
-
-            // Refresh the cakes list
-            await refresh();
-          }
-        } catch (error) {
-          console.error('Error creating group in database:', error);
-          setCreateError(
-            error instanceof Error ? error.message : 'Failed to create group in database'
-          );
-        } finally {
-          setIsCreating(false);
-        }
-      };
-
-      completeGroupCreation();
+      completeGroupCreation(hash, pendingGroupData);
     }
-  }, [isConfirmed, hash, pendingGroupData, refresh]);
+  }, [completeGroupCreation, hash, isConfirmed, pendingGroupData]);
 
   // Helper function to get icon from index
   const getIconFromIndex = (index: number | null) => {
@@ -274,13 +284,14 @@ export default function Dashboard() {
       const iconIndexValue = iconIndex >= 0 ? iconIndex : 0;
 
       // Store data for database creation after blockchain confirmation
-      setPendingGroupData({
+      const nextGroupData: PendingGroupData = {
         name: groupName.trim(),
         description: description.trim() || null,
         iconIndex: iconIndexValue,
         creatorId: user.id,
         memberIds: memberIds,
-      });
+      };
+      setPendingGroupData(nextGroupData);
 
       // Prepare blockchain data
       // All member IDs including creator
@@ -303,17 +314,59 @@ export default function Dashboard() {
       // Default billing period: 30 days in seconds
       const billingPeriodSeconds = BigInt(30 * 24 * 60 * 60); // 30 days
 
-      console.log('Creating cake on blockchain:', {
+      const formattedArgs = [
+        tokenAddress as `0x${string}`,
+        allMemberIds.map(id => id.toString()), // uint64[] -> string[]
+        weights, // uint16[] -> number[] (fits in JS number range)
+        interestRateBPS.toString(), // uint16 -> string
+        billingPeriodSeconds.toString(), // uint64 -> string
+      ];
+
+      console.log('[Dashboard] Creating cake on blockchain:', {
         token: tokenAddress,
         memberIds: allMemberIds.map((id) => id.toString()),
         weights,
         interestRate: interestRateBPS,
         billingPeriod: billingPeriodSeconds.toString(),
+        formattedArgs,
       });
+
+      if (walletType === WalletType.LEMON) {
+        console.log('[Dashboard] Calling Lemon SDK callContract with args:', formattedArgs);
+
+        const result = await lemonClient.callContract({
+          contractAddress: CONTRACT_ADDRESS_ETH_SEPOLIA,
+          functionName: 'createCake',
+          args: formattedArgs,
+          chainId: CAKE_FACTORY_CHAIN_ID,
+          value: '0',
+        });
+
+        console.log('[Dashboard] Lemon SDK result:', result);
+
+        if (result.result === TransactionResult.SUCCESS && result.data?.txHash) {
+          console.log('[Dashboard] Transaction successful, hash:', result.data.txHash);
+          await completeGroupCreation(result.data.txHash, nextGroupData);
+          return;
+        }
+
+        if (result.result === TransactionResult.CANCELLED) {
+          console.log('[Dashboard] Transaction cancelled by user');
+          throw new Error('Transaction cancelled by user');
+        }
+
+        if (result.result === TransactionResult.FAILED) {
+          console.error('[Dashboard] Transaction failed:', result.error);
+          throw new Error(result.error?.message || 'Failed to create group via Lemon Cash');
+        }
+
+        console.error('[Dashboard] Unexpected response from Lemon Cash:', result);
+        throw new Error('Unexpected response from Lemon Cash');
+      }
 
       // Call the smart contract with correct parameter order
       writeContract({
-        address: CONTRACT_ADDRESS_BASE_SEPOLIA,
+        address: CONTRACT_ADDRESS_ETH_SEPOLIA,
         abi: CAKE_FACTORY_ABI,
         functionName: 'createCake',
         args: [
@@ -324,8 +377,6 @@ export default function Dashboard() {
           billingPeriodSeconds, // uint64 billingPeriod in seconds
         ],
       });
-
-      // The rest will happen in the useEffect after confirmation
     } catch (error) {
       console.error('Error initiating group creation:', error);
       setCreateError(error instanceof Error ? error.message : 'Failed to create group');
@@ -336,31 +387,18 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#F0F9F4] to-[#FFF9E5]">
-      {/* Header */}
-      <header className="border-b-4 border-[#FFB6D9] bg-white/80 backdrop-blur sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="w-12 h-12 bg-[#FF69B4] pixel-art-shadow flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                🍰
-              </div>
-              <span className="text-2xl font-bold pixel-text text-[#FF69B4]">CakePay</span>
-            </Link>
-
-            <div className="flex items-center gap-4">
-              <ConnectButton />
-              {user && (
-                <div
-                  className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl cursor-pointer hover:scale-110 transition-transform"
-                  title={user.username || 'User'}
-                >
-                  👤
-                </div>
-              )}
+      <Header
+        userIcon={
+          user && (
+            <div
+              className="w-10 h-10 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-xl cursor-pointer hover:scale-110 transition-transform"
+              title={user.username || 'User'}
+            >
+              👤
             </div>
-          </div>
-        </div>
-      </header>
+          )
+        }
+      />
 
       <div className="container mx-auto px-4 py-8">
         {/* Your Groups Section */}
@@ -387,18 +425,26 @@ export default function Dashboard() {
                 </p>
               </div>
             ) : !walletAddress ? (
-              <Card className="p-12 pixel-card bg-gradient-to-br from-[#FFB6D9]/20 to-[#B4E7CE]/20 border-4 border-dashed border-[#FFB6D9] text-center">
-                <div className="text-6xl mb-4">🔗</div>
-                <h3 className="text-xl font-bold pixel-text text-[#2D3748] mb-2">
-                  Connect Your Wallet
-                </h3>
-                <p className="text-[#4A5568] mb-6">
-                  Connect your wallet to start creating and managing groups!
-                </p>
-                <div className="flex justify-center">
-                  <ConnectButton />
-                </div>
-              </Card>
+              // Show loading if we're still detecting Lemon/Farcaster
+              (lemon.isLemonApp || farcaster.isInMiniApp) && isConnecting ? (
+                <Card className="p-12 pixel-card bg-white border-4 border-[#FFB6D9] text-center">
+                  <div className="text-4xl mb-4 animate-bounce">🍰</div>
+                  <p className="text-[#4A5568]">Connecting to {lemon.isLemonApp ? 'Lemon' : 'Farcaster'}...</p>
+                </Card>
+              ) : (
+                <Card className="p-12 pixel-card bg-gradient-to-br from-[#FFB6D9]/20 to-[#B4E7CE]/20 border-4 border-dashed border-[#FFB6D9] text-center">
+                  <div className="text-6xl mb-4">🔗</div>
+                  <h3 className="text-xl font-bold pixel-text text-[#2D3748] mb-2">
+                    Connect Your Wallet
+                  </h3>
+                  <p className="text-[#4A5568] mb-6">
+                    Connect your wallet to start creating and managing groups!
+                  </p>
+                  <div className="flex justify-center">
+                    <ConnectButton />
+                  </div>
+                </Card>
+              )
             ) : !user ? (
               <Card className="p-6 pixel-card bg-[#FF6B6B]/10 border-4 border-[#FF6B6B]">
                 <p className="text-[#FF6B6B]">Please register to continue.</p>

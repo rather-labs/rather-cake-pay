@@ -17,7 +17,8 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import Image from 'next/image';
+import { useState, useEffect, useCallback } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { createClient } from '@/lib/supabase/client';
 import { CakesAPI } from '@/lib/api/cakes';
@@ -26,14 +27,12 @@ import { UsersAPI } from '@/lib/api/users';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { ICON_OPTIONS } from '@/lib/constants';
 import type { Cake, CakeIngredient, User } from '@/types/database';
-import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
-
-import CakeFactoryArtifactAbi from '@/public/contracts/CakeFactory.json';
 import { parseUnits } from 'viem';
-
-export const CAKE_FACTORY_ABI = CakeFactoryArtifactAbi.abi;
-export const CONTRACT_ADDRESS_BASE_SEPOLIA = process.env
-  .NEXT_PUBLIC_CONTRACT_ADDRESS_BASE_SEPOLIA as `0x${string}`;
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_ABI, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory';
+import { useUserContext, WalletType } from '@/contexts/UserContext';
+import { lemonClient } from '@/lib/lemon/client';
+import { TransactionResult } from '@lemoncash/mini-app-sdk';
 
 type MemberWithBalance = User & {
   balance: number;
@@ -48,6 +47,7 @@ type ExpenseWithDetails = CakeIngredient & {
 export default function GroupDetailPage({ params }: { params: { groupId: string } }) {
   const { groupId } = params;
   const { user: currentUser } = useCurrentUser();
+  const { walletType } = useUserContext();
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -324,9 +324,39 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
         throw new Error('No valid payers or amounts found');
       }
 
+      if (walletType === WalletType.LEMON) {
+        const result = await lemonClient.callContract({
+          contractAddress: CONTRACT_ADDRESS_ETH_SEPOLIA,
+          functionName: 'addBatchedCakeIngredients',
+          args: [
+            BigInt(cake.id),
+            weights,
+            allPayerIds,
+            allAmounts,
+          ],
+          chainId: CAKE_FACTORY_CHAIN_ID,
+          value: '0',
+        });
+
+        if (result.result === TransactionResult.SUCCESS && result.data?.txHash) {
+          await finalizeIngredientSubmission(result.data.txHash);
+          return;
+        }
+
+        if (result.result === TransactionResult.CANCELLED) {
+          throw new Error('Transaction cancelled by user');
+        }
+
+        if (result.result === TransactionResult.FAILED) {
+          throw new Error(result.error?.message || 'Failed to submit via Lemon Cash');
+        }
+
+        throw new Error('Unexpected response from Lemon Cash');
+      }
+
       // Call the smart contract
       writeContract({
-        address: CONTRACT_ADDRESS_BASE_SEPOLIA,
+        address: CONTRACT_ADDRESS_ETH_SEPOLIA,
         abi: CAKE_FACTORY_ABI,
         functionName: 'addBatchedCakeIngredients',
         args: [
@@ -351,32 +381,33 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
     }
   }, [writeError]);
 
+  const finalizeIngredientSubmission = useCallback(
+    async (txHash: string) => {
+      try {
+        const supabase = createClient();
+        const ingredientsAPI = new IngredientsAPI(supabase);
+        const pendingIngredients = expenses.filter((exp) => exp.status === 'pending');
+
+        for (const ingredient of pendingIngredients) {
+          await ingredientsAPI.markIngredientSubmitted(ingredient.id, txHash);
+        }
+
+        window.location.reload();
+      } catch (error) {
+        console.error('Error updating ingredient statuses:', error);
+        alert('Transaction confirmed but failed to update statuses. Please refresh the page.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [expenses]
+  );
+
   useEffect(() => {
     if (isConfirmed && hash) {
-      const updateIngredientStatuses = async () => {
-        try {
-          const supabase = createClient();
-          const ingredientsAPI = new IngredientsAPI(supabase);
-          const pendingIngredients = expenses.filter((exp) => exp.status === 'pending');
-
-          // Update all pending ingredients to 'submitted' status
-          for (const ingredient of pendingIngredients) {
-            await ingredientsAPI.markIngredientSubmitted(ingredient.id, hash);
-          }
-
-          // Refresh the page to show updated data
-          window.location.reload();
-        } catch (error) {
-          console.error('Error updating ingredient statuses:', error);
-          alert('Transaction confirmed but failed to update statuses. Please refresh the page.');
-        } finally {
-          setIsSubmitting(false);
-        }
-      };
-
-      updateIngredientStatuses();
+      finalizeIngredientSubmission(hash);
     }
-  }, [isConfirmed, hash, expenses]);
+  }, [finalizeIngredientSubmission, hash, isConfirmed]);
 
   const getCategoryIcon = () => {
     // Default to Utensils icon for expenses
@@ -790,12 +821,15 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                     href={`/user/${member.id}`}
                     className="flex flex-col items-center gap-1 group"
                   >
-                    <div className="w-12 h-12 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl hover:scale-110 transition-transform cursor-pointer group-hover:border-2 group-hover:border-[#FF69B4]">
+                    <div className="w-12 h-12 bg-[#E9D5FF] pixel-art-shadow flex items-center justify-center text-2xl hover:scale-110 transition-transform cursor-pointer group-hover:border-2 group-hover:border-[#FF69B4] overflow-hidden rounded">
                       {member.avatar_url ? (
-                        <img
+                        <Image
                           src={member.avatar_url}
                           alt={member.username}
-                          className="w-full h-full rounded"
+                          width={48}
+                          height={48}
+                          className="h-full w-full object-cover"
+                          unoptimized
                         />
                       ) : (
                         <span>{member.username.charAt(0).toUpperCase()}</span>
@@ -998,12 +1032,15 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                           {index === 2 && <Award className="w-6 h-6 text-[#CD7F32]" />}
                         </div>
 
-                        <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl group-hover:border-2 group-hover:border-[#FF69B4] transition-all">
+                        <div className="w-12 h-12 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-2xl group-hover:border-2 group-hover:border-[#FF69B4] transition-all overflow-hidden rounded">
                           {member.avatar_url ? (
-                            <img
+                            <Image
                               src={member.avatar_url}
                               alt={member.username}
-                              className="w-full h-full rounded"
+                              width={48}
+                              height={48}
+                              className="h-full w-full object-cover"
+                              unoptimized
                             />
                           ) : (
                             <span>{member.username.charAt(0).toUpperCase()}</span>
@@ -1298,12 +1335,15 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                             >
                               {isPayer && <span className="text-white text-xs">✓</span>}
                             </div>
-                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg">
+                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg overflow-hidden rounded">
                               {member.avatar_url ? (
-                                <img
+                                <Image
                                   src={member.avatar_url}
                                   alt={member.username}
-                                  className="w-full h-full rounded"
+                                  width={32}
+                                  height={32}
+                                  className="h-full w-full object-cover"
+                                  unoptimized
                                 />
                               ) : (
                                 <span>{member.username.charAt(0).toUpperCase()}</span>
@@ -1439,12 +1479,15 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
                             >
                               {isIncluded && <span className="text-white text-xs">✓</span>}
                             </div>
-                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg">
+                            <div className="w-8 h-8 bg-[#FFF5F7] pixel-art-shadow flex items-center justify-center text-lg overflow-hidden rounded">
                               {member.avatar_url ? (
-                                <img
+                                <Image
                                   src={member.avatar_url}
                                   alt={member.username}
-                                  className="w-full h-full rounded"
+                                  width={32}
+                                  height={32}
+                                  className="h-full w-full object-cover"
+                                  unoptimized
                                 />
                               ) : (
                                 <span>{member.username.charAt(0).toUpperCase()}</span>
