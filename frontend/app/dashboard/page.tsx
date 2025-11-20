@@ -14,7 +14,7 @@ import { createCake } from '@/lib/actions/cakes';
 import { searchUsers } from '@/lib/actions/users';
 import type { User } from '@/types/database';
 import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
-import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory';
+import { CAKE_FACTORY_ABI, CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID, getOnChainUserIds } from '@/lib/contracts/cakeFactory';
 import { lemonClient } from '@/lib/lemon/client';
 import { TransactionResult } from '@lemoncash/mini-app-sdk';
 import { useLemonWallet } from '@/hooks/use-lemon-wallet';
@@ -274,6 +274,13 @@ export default function Dashboard() {
         return;
       }
 
+      // Contract requires at least 2 members total (creator + at least 1 other member)
+      if (memberIds.length === 0) {
+        setCreateError('⚠️ You must add at least 1 other member to create a group. Groups require a minimum of 2 members.');
+        setIsCreating(false);
+        return;
+      }
+
       if (!user) {
         setCreateError('User not found. Please register first.');
         setIsCreating(false);
@@ -294,11 +301,40 @@ export default function Dashboard() {
       setPendingGroupData(nextGroupData);
 
       // Prepare blockchain data
-      // All member IDs including creator
-      const allMemberIds = [BigInt(user.id), ...memberIds.map((id) => BigInt(id))];
+      // Get wallet addresses for all members (creator + selected members)
+      const allMembers = [user, ...selectedMembers.filter((m) => m?.id)];
+      const allWalletAddresses = allMembers.map((member) => member.wallet_address);
+
+      console.log('[Dashboard] Fetching on-chain user IDs for wallet addresses:', allWalletAddresses);
+
+      // Fetch on-chain user IDs from the contract
+      const onChainUserIds = await getOnChainUserIds(allWalletAddresses);
+
+      console.log('[Dashboard] On-chain user IDs:', onChainUserIds.map((id) => id.toString()));
+
+      // Validate that all users are registered on-chain
+      const unregisteredUsers = onChainUserIds
+        .map((id, index) => ({ id, address: allWalletAddresses[index] }))
+        .filter((item) => item.id === BigInt(0));
+
+      if (unregisteredUsers.length > 0) {
+        const unregisteredDetails = unregisteredUsers
+          .map((u) => {
+            const memberIndex = allMembers.findIndex((m) => m.wallet_address === u.address);
+            const memberName = allMembers[memberIndex]?.username || 'Unknown';
+            return `${memberName} (${u.address.slice(0, 6)}...${u.address.slice(-4)})`;
+          })
+          .join(', ');
+        setCreateError(
+          `❌ NOT REGISTERED ON BLOCKCHAIN:\n\n${unregisteredDetails}\n\nThese members must visit the Register page and complete blockchain registration before they can be added to a group.`
+        );
+        setIsCreating(false);
+        setPendingGroupData(null);
+        return;
+      }
 
       // Create initial weights array (equal split)
-      const totalMembers = allMemberIds.length;
+      const totalMembers = onChainUserIds.length;
       const equalWeight = Math.floor(10000 / totalMembers); // 10000 = 100% in BPS
       const weights = new Array(totalMembers).fill(equalWeight);
 
@@ -316,7 +352,7 @@ export default function Dashboard() {
 
       const formattedArgs = [
         tokenAddress as `0x${string}`,
-        allMemberIds.map(id => id.toString()), // uint64[] -> string[]
+        onChainUserIds.map((id) => id.toString()), // uint64[] -> string[]
         weights, // uint16[] -> number[] (fits in JS number range)
         interestRateBPS.toString(), // uint16 -> string
         billingPeriodSeconds.toString(), // uint64 -> string
@@ -324,7 +360,7 @@ export default function Dashboard() {
 
       console.log('[Dashboard] Creating cake on blockchain:', {
         token: tokenAddress,
-        memberIds: allMemberIds.map((id) => id.toString()),
+        memberIds: onChainUserIds.map((id) => id.toString()),
         weights,
         interestRate: interestRateBPS,
         billingPeriod: billingPeriodSeconds.toString(),
@@ -371,7 +407,7 @@ export default function Dashboard() {
         functionName: 'createCake',
         args: [
           tokenAddress as `0x${string}`, // address token
-          allMemberIds, // uint64[] memberIds
+          onChainUserIds, // uint64[] memberIds (on-chain user IDs)
           weights, // uint16[] memberWeightsBps
           interestRateBPS, // uint16 interestRate in BPS
           billingPeriodSeconds, // uint64 billingPeriod in seconds

@@ -10,7 +10,7 @@ import { useAccount } from 'wagmi'
 import { createPublicClient, http, formatEther, type Address } from 'viem'
 import { sepolia } from 'viem/chains'
 import { lemonClient } from '@/lib/lemon/client'
-import { CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID } from '@/lib/contracts/cakeFactory'
+import { CONTRACT_ADDRESS_ETH_SEPOLIA, CAKE_FACTORY_CHAIN_ID, getOnChainUserId } from '@/lib/contracts/cakeFactory'
 
 const sepoliaClient = createPublicClient({
   chain: sepolia,
@@ -35,6 +35,8 @@ export function WalletDebug() {
   const [depositResult, setDepositResult] = useState<string>('')
   const [isTestingCreateCake, setIsTestingCreateCake] = useState(false)
   const [createCakeResult, setCreateCakeResult] = useState<string>('')
+  const [onChainUserId, setOnChainUserId] = useState<string>('...')
+  const [onChainUserIdStatus, setOnChainUserIdStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
 
   // Only render after client-side mount to avoid hydration mismatch
   useEffect(() => {
@@ -68,6 +70,40 @@ export function WalletDebug() {
     }
 
     fetchBalance()
+
+    return () => {
+      cancelled = true
+    }
+  }, [walletAddress])
+
+  // Fetch on-chain user ID
+  useEffect(() => {
+    if (!walletAddress || !walletAddress.startsWith('0x')) {
+      setOnChainUserIdStatus('idle')
+      setOnChainUserId('n/a')
+      return
+    }
+
+    let cancelled = false
+
+    const fetchOnChainUserId = async () => {
+      setOnChainUserIdStatus('loading')
+      setOnChainUserId('loading...')
+      try {
+        const userId = await getOnChainUserId(walletAddress)
+        if (cancelled) return
+        setOnChainUserId(userId.toString())
+        setOnChainUserIdStatus('ready')
+      } catch (error) {
+        console.error('[WalletDebug] Failed to fetch on-chain user ID:', error)
+        if (!cancelled) {
+          setOnChainUserIdStatus('error')
+          setOnChainUserId('error')
+        }
+      }
+    }
+
+    fetchOnChainUserId()
 
     return () => {
       cancelled = true
@@ -225,26 +261,33 @@ export function WalletDebug() {
       return
     }
 
+    if (onChainUserId === '0' || onChainUserId === 'n/a' || onChainUserId === 'loading...') {
+      setCreateCakeResult('❌ You must be registered on-chain first')
+      return
+    }
+
     setIsTestingCreateCake(true)
     setCreateCakeResult('🔄 Testing createCake...')
 
     try {
-      // Simulate the same data structure as dashboard
-      const memberIds = ['1', '2'] // Test with user IDs 1 and 2
-      const weights = [5000, 5000] // 50/50 split
+      // Contract requires at least 2 members
+      // For testing, we'll use your user ID twice (not realistic but tests the flow)
+      // Note: The contract expects user IDs (uint64), NOT wallet addresses
+      const memberIds = [onChainUserId, onChainUserId] // Use your ID twice for testing
+      const weights = [5000, 5000] // 50/50 split (must sum to 10000 BPS)
       const interestRate = '500' // 5% = 500 BPS
       const billingPeriod = '2592000' // 30 days in seconds
-      const tokenAddress = '0x0000000000000000000000000000000000000000' // ETH
+      const tokenAddress = '0x0000000000000000000000000000000000000000' // ETH (zero address)
 
       const formattedArgs = [
         tokenAddress as `0x${string}`,
-        memberIds,
-        weights,
-        interestRate,
-        billingPeriod,
+        memberIds, // uint64[] as string[]
+        weights, // uint16[] as number[]
+        interestRate, // uint16 as string
+        billingPeriod, // uint64 as string
       ]
 
-      setCreateCakeResult(`📤 Args: ${JSON.stringify(formattedArgs).slice(0, 50)}...`)
+      setCreateCakeResult(`📤 Calling with: token=ETH, members=[${onChainUserId},${onChainUserId}], weights=[5000,5000]...`)
 
       const result = await lemonClient.callContract({
         contractAddress: CONTRACT_ADDRESS_ETH_SEPOLIA,
@@ -257,9 +300,14 @@ export function WalletDebug() {
       if (result.result === 'SUCCESS' && result.data?.txHash) {
         setCreateCakeResult(`✅ Success! TX: ${result.data.txHash.slice(0, 10)}...`)
       } else if (result.result === 'CANCELLED') {
-        setCreateCakeResult('⚠️ Transaction cancelled')
+        setCreateCakeResult('⚠️ User cancelled')
       } else if (result.result === 'FAILED') {
-        setCreateCakeResult(`❌ Failed: ${result.error?.message || 'Unknown'}`)
+        const errorMsg = result.error?.message || 'Unknown error'
+        // Common contract reverts:
+        // - MemberNotRegistered: User IDs 1 or 2 don't exist on-chain
+        // - InvalidWeights: Weights don't sum to 10000
+        // - InvalidMembers: Less than 2 members
+        setCreateCakeResult(`❌ Contract revert: ${errorMsg}`)
       } else {
         setCreateCakeResult(`❌ Unexpected: ${JSON.stringify(result).slice(0, 100)}`)
       }
@@ -298,6 +346,15 @@ export function WalletDebug() {
           )}
         </div>
         <div>ETH Balance: {renderBalance()}</div>
+        <div className="flex items-center gap-2">
+          <span>On-chain User ID: {onChainUserId}</span>
+          {onChainUserIdStatus === 'ready' && onChainUserId === '0' && (
+            <span className="text-yellow-400 font-bold">⚠️ NOT REGISTERED</span>
+          )}
+          {onChainUserIdStatus === 'ready' && onChainUserId !== '0' && (
+            <span className="text-green-400">✅</span>
+          )}
+        </div>
         <div>Context Loading: {isConnecting ? '✅' : '❌'}</div>
         <div>Connected Chain: {renderChain()}</div>
 

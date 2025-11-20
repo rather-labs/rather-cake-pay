@@ -325,15 +325,18 @@ export default function GroupDetailPage({ params }: { params: { groupId: string 
       }
 
       if (walletType === WalletType.LEMON) {
+        // Format arguments for Lemon SDK
+        const formattedArgs = [
+          cake.id.toString(), // uint128 cakeId -> string
+          weights, // uint16[] weights -> number[] (fits in JS number range)
+          allPayerIds.map((id) => id.toString()), // uint64[] payerIds -> string[]
+          allAmounts.map((amount) => amount.toString()), // uint256[] amounts -> string[]
+        ];
+
         const result = await lemonClient.callContract({
           contractAddress: CONTRACT_ADDRESS_ETH_SEPOLIA,
           functionName: 'addBatchedCakeIngredients',
-          args: [
-            BigInt(cake.id),
-            weights,
-            allPayerIds,
-            allAmounts,
-          ],
+          args: formattedArgs,
           chainId: CAKE_FACTORY_CHAIN_ID,
           value: '0',
         });
